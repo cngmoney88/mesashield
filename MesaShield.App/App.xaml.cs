@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Reflection;
 using System.Windows;
 using MesaShield.Core;
+using MesaShield.Core.Incidents;
 using MesaShield.Core.Ml;
 using MesaShield.Core.Privacy;
 using MesaShield.Windows;
@@ -31,6 +32,22 @@ public partial class App : System.Windows.Application
     public static ScanEngine Engine { get; private set; } = null!;
     public static QuarantineManager Quarantine { get; private set; } = null!;
     public static ShieldEventLog EventLog { get; private set; } = null!;
+    public static IncidentStore Incidents { get; private set; } = null!;
+    public static string IncidentsDirectory => Path.Combine(DataDirectory, "Incidents");
+
+    /// <summary>Reconstruct and save the story around a detection, then surface it in the UI.</summary>
+    public static async Task RecordIncidentAsync(string kind, string message, string? file, string? threat)
+    {
+        try
+        {
+            var trigger = new ShieldEventLog.ShieldEvent(DateTimeOffset.UtcNow, kind, message, file, threat);
+            var recent = await EventLog.ReadRecentAsync(300);
+            var incident = IncidentBuilder.Build(trigger, recent, TimeSpan.FromMinutes(10));
+            Incidents.Save(incident);
+            Current.Dispatcher.Invoke(() => (Current.MainWindow as MainWindow)?.OnIncident(incident));
+        }
+        catch (Exception ex) { await EventLog.LogAsync("error", $"Incident recording failed: {ex.Message}"); }
+    }
     public static SignatureUpdater Updater { get; private set; } = null!;
     public static UpdateChecker AppUpdater { get; private set; } = null!;
     public static ReputationClient Reputation { get; private set; } = null!;
@@ -242,6 +259,7 @@ public partial class App : System.Windows.Application
         };
         try { EventLog.PurgeOlderThan(Settings.LogRetentionDays); } catch { }
         Quarantine = new QuarantineManager(QuarantineDirectory);
+        Incidents = new IncidentStore(IncidentsDirectory);
         Updater = new SignatureUpdater(Http, SignaturesDirectory);
         AppUpdater = new UpdateChecker(Http);
         Reputation = new ReputationClient(Http,

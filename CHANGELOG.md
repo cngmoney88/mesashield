@@ -1,5 +1,15 @@
 # MesaShield changelog
 
+## v0.18.0 — incident timeline + reliable publishing
+- **Automated incident timeline.** When something is detected, MesaShield now reconstructs the
+  whole story around it — the file arriving, the process launching, the network destination it
+  tried to reach, and what was done about it — into a plain-English, timestamped incident with a
+  summary, outcome, and recommendation. Incidents are saved so they can be reviewed later and
+  exported as a shareable report.
+- **Publishing fixed.** Resolved the deployment mistake that kept GitHub frozen at v0.8.0 (new
+  versions were being left as un-extracted zips instead of committed source). A single
+  PUBLISH.bat now syncs, commits, tags, and pushes correctly every time.
+
 ## v0.17.0 — hands-off updates + live traffic
 - **Fully automatic updates.** The GitHub update source is pre-configured, and updates now
   download, verify, and install on their own on a schedule — no clicking, and no SmartScreen

@@ -13,6 +13,7 @@ namespace MesaShield.App;
 public partial class MainWindow : Window
 {
     private readonly ObservableCollection<ThreatFinding> _findings = new();
+    private readonly ObservableCollection<MesaShield.Core.Incidents.Incident> _incidents = new();
     private CancellationTokenSource? _scanCts;
     private long _threatsHandled;
     private TrayIcon? _tray;
@@ -44,13 +45,16 @@ public partial class MainWindow : Window
             _ = RefreshActivityAsync();
             if (App.Settings.ShowNotifications)
                 _tray?.Notify("Threat blocked", $"{finding.ThreatName}\n{Path.GetFileName(finding.FilePath)}", warning: true);
+            _ = App.RecordIncidentAsync(quarantined ? "quarantine" : "detection",
+                $"{finding.ThreatName} detected in {Path.GetFileName(finding.FilePath)}", finding.FilePath, finding.ThreatName);
         });
-        App.ProcessWatch.ProcessBlocked += (_, finding) => Dispatcher.Invoke(() =>
+        App.ProcessWatch.ProcessBlocked += (_sender, finding) => Dispatcher.Invoke(() =>
         {
             _threatsHandled++;
             RefreshDashboardCounters();
             if (App.Settings.ShowNotifications)
                 _tray?.Notify("Program blocked", finding.ThreatName, warning: true);
+            _ = App.RecordIncidentAsync("blocked", $"Program blocked: {finding.ThreatName}", finding.FilePath, finding.ThreatName);
         });
         App.BehaviorWatch.AlertRaised += alert => Dispatcher.Invoke(() =>
         {
@@ -59,6 +63,7 @@ public partial class MainWindow : Window
             _ = RefreshActivityAsync();
             if (App.Settings.ShowNotifications)
                 _tray?.Notify(alert.Severity == ThreatSeverity.Malicious ? "⚠ Ransomware blocked" : "Suspicious activity", alert.Message, warning: true);
+            _ = App.RecordIncidentAsync("behavior", alert.Message, null, alert.Severity == ThreatSeverity.Malicious ? "Behavior.Ransomware" : null);
         });
 
         UpdateRealTimeCard();
@@ -87,6 +92,19 @@ public partial class MainWindow : Window
             ShowPage("Scan");
             _ = RunScanAsync(new[] { root }, $"Scanning {root}");
         }
+    }
+
+    /// <summary>A detection was reconstructed into a full incident story — surface it and keep the last few.</summary>
+    public void OnIncident(MesaShield.Core.Incidents.Incident incident)
+    {
+        _incidents.Insert(0, incident);
+        while (_incidents.Count > 50) _incidents.RemoveAt(_incidents.Count - 1);
+        if (App.Settings.ShowNotifications)
+            _tray?.Notify(
+                incident.Severity == ThreatSeverity.Malicious ? "⚠ Incident contained" : "Incident recorded",
+                incident.Title,
+                warning: incident.Severity == ThreatSeverity.Malicious);
+        _ = RefreshActivityAsync();
     }
 
     // ---- Notifications from background jobs -------------------------------
