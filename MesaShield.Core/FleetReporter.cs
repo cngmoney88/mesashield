@@ -13,6 +13,11 @@ public sealed record MachineStatus
     public bool BehaviorGuard { get; init; }
     public bool ProcessMonitoring { get; init; }
     public bool AdaptiveLearning { get; init; }
+    public bool DeepMonitoring { get; init; }        // ETW running (elevated)
+    public bool Elevated { get; init; }
+    public string EgressMode { get; init; } = "Off";
+    public long EgressBlocks24h { get; init; }
+    public string PrivacyMode { get; init; } = "Standard";
 
     public int SignatureCount { get; init; }
     public DateTimeOffset? SignaturesUpdatedUtc { get; init; }

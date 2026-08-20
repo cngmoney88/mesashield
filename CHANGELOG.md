@@ -1,5 +1,88 @@
 # MesaShield changelog
 
+## v0.17.0 — hands-off updates + live traffic
+- **Fully automatic updates.** The GitHub update source is pre-configured, and updates now
+  download, verify, and install on their own on a schedule — no clicking, and no SmartScreen
+  prompt (the internet mark is stripped only after the SHA-256 check passes). Downgrade-guarded.
+- **Live Traffic view.** The Traffic page now shows every outbound connection as it happens —
+  program, destination, and the decision — so you can watch exactly where data goes. Reminder:
+  Observe mode only watches; switch to Enforce to actually block data leaving.
+- **.NET baked in:** the GitHub self-contained installer needs no prerequisites on any PC.
+
+## v0.16.0 — Fleet Command + downgrade fix
+- **Downgrade guard (fixes the "reverts to v0.8.0" regression).** MesaShield now refuses to
+  install any build older than what is already installed — both the installer and the in-app
+  updater check the version first. A stale GitHub release can no longer drag a machine backward.
+- **Fleet Command center.** The Fleet tab can now push actions to any machine or the whole
+  fleet — Quick/Full scan, Update signatures, Check for app update, and set Egress mode — over
+  the same shared folder, no server software. Machines apply pushed commands within a minute and
+  report richer status (deep monitoring, elevation, egress mode, blocks/24h).
+
+## v0.15.0 — tamper-proofing / self-defense
+- **Self-healing.** A watchdog checks every minute that each protection module is running and
+  restarts any that were stopped, logging it as a possible tamper attempt and notifying you.
+- **Hard to kill.** The elevated autostart is now a resilient scheduled task that relaunches
+  MesaShield within minutes if it is killed (paired with single-instance, kill = it comes back),
+  auto-restarts on failure, and is re-registered automatically if someone deletes it.
+
+## v0.14.0 — one app, one window
+- **Single instance.** MesaShield can no longer open a second window. Launching it again (or
+  clicking any copy of the exe) simply brings the one running window to the front. Ends the
+  "which app am I looking at" confusion.
+
+## v0.13.0 — one-tap deep monitoring
+- **Deep monitoring now elevates itself.** Click "Enable deep monitoring" on the dashboard,
+  approve one Windows prompt, and MesaShield registers a scheduled task that launches it with
+  administrator rights at every logon — silently, no more prompts. ETW deep monitoring and
+  active firewall/egress blocking then run automatically from then on.
+
+## v0.12.0 — data-loss prevention (egress control)
+- **New Traffic page.** See every outbound connection live — which program, where it's going
+  (with resolved hostname), and MesaShield's decision and reasoning for each.
+- **Learns essential vs non-essential.** The network learner builds a per-machine profile of the
+  destinations each program normally uses; core OS plumbing (Windows Update, DNS, NTP, certs) is
+  recognized as essential and never blocked.
+- **Stops data leaving.** Three modes: Off, Observe (alert only), and Enforce — which blocks
+  connections to destinations a program has never used, and treats a large upload to a brand-new
+  external host as exfiltration. Blocking is done via the Windows Firewall (needs admin).
+- **You stay in control:** approve or block any destination from the Traffic view; your choices
+  persist and override the automatic decisions.
+
+## v0.11.0 — update reliability
+- **Fixed the "reverts to the old version" bug.** The installer now stops any running installed
+  copy (which auto-starts to the tray and locked its own file) before replacing it, with retries.
+  This is why re-running the installer kept bouncing back to the previous version.
+- **Reliable in-app "Update now."** Instead of an in-place exe swap that Windows blocks, the app
+  now hands off to the downloaded self-installer after it exits, and clearly tells you to expect
+  (and approve) the SmartScreen prompt — with a fallback that opens the installer's folder if the
+  handoff can't start. No more silent no-ops.
+- Fixed the "vv0.10.0" version label (now shows "v0.10.0").
+
+## v0.10.0 — privacy hardening
+- **Provable no-phone-home.** Every outbound request now passes through a single network
+  chokepoint that enforces policy and records the decision. There is no MesaShield server and
+  no telemetry anywhere — this makes that verifiable, not just a claim.
+- **Three privacy modes:** Standard (updates on, cloud lookup only with a key), Strict (no file
+  fingerprint ever leaves the machine — cloud lookups hard-blocked), and Offline (zero internet
+  connections; definitions come from a local mirror folder on your server).
+- **Privacy page** in the app: pick the mode, see every address the app could contact and why,
+  read the live outbound-connection audit log, set log auto-purge, and one-click erase all
+  learned data and logs.
+- **Local signature mirror** so offline fleets update definitions from a LAN share, never the
+  internet. Generic User-Agent — no machine/user/version fingerprint in requests.
+
+## v0.9.0 — learned classifier
+- **One-class "known-good" model.** MesaShield can now learn the statistical profile of
+  legitimate software and flag files that don't fit — real, data-trained ML that needs no
+  malware samples and runs entirely offline. Conservative by design (flags "suspicious," never
+  auto-quarantines).
+- **One-click training in the app.** Settings → "Build known-good model from this PC" learns
+  from the software already installed on the machine (Program Files, System32). Nothing is
+  uploaded. A Python trainer (`ml-training/train_benign_model.py`) is included for building a
+  shared model to distribute to the fleet.
+- Honest note: a full malware/clean-corpus classifier (EMBER-style) remains a separate offline
+  project; this one-class approach is the safe, genuinely-trained path shipping now.
+
 ## v0.8.0 — deep monitoring
 - **ETW deep monitoring.** Real-time, system-wide telemetry via Event Tracing for Windows:
   every process start (with true parent-process info) and outbound TCP connection feeds the

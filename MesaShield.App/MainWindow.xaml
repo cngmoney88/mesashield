@@ -21,9 +21,11 @@
                     <Button x:Name="NavScan" Style="{StaticResource NavButton}" Content="🔍   Scan" Click="Nav_Click" Tag="Scan"/>
                     <Button x:Name="NavQuarantine" Style="{StaticResource NavButton}" Content="🔒   Quarantine" Click="Nav_Click" Tag="Quarantine"/>
                     <Button x:Name="NavFirewall" Style="{StaticResource NavButton}" Content="🌐   Firewall" Click="Nav_Click" Tag="Firewall"/>
+                    <Button x:Name="NavTraffic" Style="{StaticResource NavButton}" Content="📡   Traffic" Click="Nav_Click" Tag="Traffic"/>
                     <Button x:Name="NavFleet" Style="{StaticResource NavButton}" Content="🖥   Fleet" Click="Nav_Click" Tag="Fleet"/>
                     <Button x:Name="NavActivity" Style="{StaticResource NavButton}" Content="📋   Activity" Click="Nav_Click" Tag="Activity"/>
-                    <Button x:Name="NavSettings" Style="{StaticResource NavButton}" Content="⚙   Updates" Click="Nav_Click" Tag="Settings"/>
+                    <Button x:Name="NavPrivacy" Style="{StaticResource NavButton}" Content="🔐   Privacy" Click="Nav_Click" Tag="Privacy"/>
+                    <Button x:Name="NavSettings" Style="{StaticResource NavButton}" Content="⚙   Settings" Click="Nav_Click" Tag="Settings"/>
                 </StackPanel>
                 <TextBlock DockPanel.Dock="Bottom" x:Name="VersionText" Text="MesaShield 0.1.0"
                            Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="20,0,0,16" VerticalAlignment="Bottom"/>
@@ -40,7 +42,11 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <TextBlock Text="Dashboard" FontSize="26" FontWeight="Bold" Margin="0,0,0,20"/>
+                <DockPanel Margin="0,0,0,20">
+                    <TextBlock Text="Dashboard" FontSize="26" FontWeight="Bold"/>
+                    <Button x:Name="EnableDeepMonitorButton" Style="{StaticResource ActionButton}" Content="🛡 Enable deep monitoring (admin)"
+                            Click="EnableDeepMonitor_Click" DockPanel.Dock="Right" HorizontalAlignment="Right" Visibility="Collapsed"/>
+                </DockPanel>
                 <UniformGrid Grid.Row="1" Columns="3" Margin="0,0,0,16">
                     <Border Style="{StaticResource Card}" Margin="0,0,8,0">
                         <StackPanel>
@@ -197,7 +203,21 @@
                     <TextBlock Text="Fleet" FontSize="26" FontWeight="Bold"/>
                     <Button Style="{StaticResource SubtleButton}" Content="Refresh" Click="RefreshFleet_Click" HorizontalAlignment="Right" DockPanel.Dock="Right"/>
                 </DockPanel>
-                <TextBlock Grid.Row="1" x:Name="FleetStatusText" Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,12" TextWrapping="Wrap"/>
+                <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock x:Name="FleetStatusText" Foreground="{StaticResource TextDimBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                        <TextBlock Text="Push a command — to the selected machine, or to all of them:" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <WrapPanel>
+                            <Button Style="{StaticResource ActionButton}" Content="Quick scan" Click="FleetCmd_Click" Tag="QuickScan" Margin="0,0,8,8"/>
+                            <Button Style="{StaticResource SubtleButton}" Content="Full scan" Click="FleetCmd_Click" Tag="FullScan" Margin="0,0,8,8"/>
+                            <Button Style="{StaticResource SubtleButton}" Content="Update signatures" Click="FleetCmd_Click" Tag="UpdateSignatures" Margin="0,0,8,8"/>
+                            <Button Style="{StaticResource SubtleButton}" Content="Check for app update" Click="FleetCmd_Click" Tag="CheckAppUpdate" Margin="0,0,8,8"/>
+                            <Button Style="{StaticResource SubtleButton}" Content="Egress: Enforce" Click="FleetCmd_Click" Tag="SetEgressMode:Enforce" Margin="0,0,8,8"/>
+                            <Button Style="{StaticResource SubtleButton}" Content="Egress: Observe" Click="FleetCmd_Click" Tag="SetEgressMode:Observe" Margin="0,0,8,8"/>
+                            <CheckBox x:Name="FleetToAll" Content="Send to ALL machines" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" Margin="4,0,0,8"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
                 <Border Grid.Row="2" Style="{StaticResource Card}">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="All Mesa Fab machines reporting to the shared folder" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
@@ -266,6 +286,9 @@
                                 <CheckBox x:Name="ChkMl" Content="Offline ML malware classifier (scores unknown files locally)" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
                                 <CheckBox x:Name="ChkEtw" Content="Deep monitoring via ETW (live process + network telemetry — needs admin)" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
                                 <TextBlock x:Name="LearnerStatusText" Foreground="{StaticResource TextDimBrush}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                <Button x:Name="TrainBenignButton" Style="{StaticResource SubtleButton}" Content="Build known-good model from this PC" Click="TrainBenign_Click" HorizontalAlignment="Left" Margin="0,10,0,0"/>
+                                <TextBlock x:Name="TrainBenignStatus" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"
+                                           Text="Learns what your installed software looks like, so files that don't fit get flagged. Runs locally on this PC's own programs — no malware samples, nothing uploaded."/>
                             </StackPanel>
                         </Border>
 
@@ -349,6 +372,122 @@
                         </Border>
 
                         <Button x:Name="BtnSaveSettings" Style="{StaticResource ActionButton}" Content="Save settings" Click="SaveSettings_Click" HorizontalAlignment="Left" Margin="0,0,0,20"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- TRAFFIC / EGRESS -->
+            <Grid x:Name="PageTraffic" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="Traffic &amp; data-loss prevention" FontSize="26" FontWeight="Bold" Margin="0,0,0,16"/>
+                <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="MesaShield learns which internet destinations each program normally uses, and can stop data leaving to anywhere it shouldn't. Essential OS services (updates, DNS, time) are never blocked."
+                                   Foreground="{StaticResource TextDimBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="RbEgressOff" GroupName="Egress" Foreground="{StaticResource TextBrush}" Content="Off" Margin="0,0,16,0"/>
+                            <RadioButton x:Name="RbEgressObserve" GroupName="Egress" Foreground="{StaticResource TextBrush}" Content="Observe (alert only)" Margin="0,0,16,0"/>
+                            <RadioButton x:Name="RbEgressEnforce" GroupName="Egress" Foreground="{StaticResource TextBrush}" Content="Enforce (block data leaving)" Margin="0,0,16,0"/>
+                            <Button x:Name="BtnSaveEgress" Style="{StaticResource ActionButton}" Content="Apply" Click="SaveEgress_Click"/>
+                        </StackPanel>
+                        <TextBlock x:Name="EgressStatusText" Foreground="{StaticResource TextDimBrush}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Row="2" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                            <TextBlock Text="Outbound connections &amp; decisions" FontSize="16" FontWeight="SemiBold"/>
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
+                                <Button Style="{StaticResource SubtleButton}" Content="Approve selected" Click="ApproveEgress_Click" Margin="0,0,8,0"/>
+                                <Button Style="{StaticResource DangerButton}" Content="Block selected" Click="BlockEgress_Click"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <ListView x:Name="EgressList">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Time" Width="130" DisplayMemberBinding="{Binding Time}"/>
+                                    <GridViewColumn Header="Program" Width="150" DisplayMemberBinding="{Binding Process}"/>
+                                    <GridViewColumn Header="Destination" Width="200" DisplayMemberBinding="{Binding Destination}"/>
+                                    <GridViewColumn Header="Decision" Width="90" DisplayMemberBinding="{Binding Action}"/>
+                                    <GridViewColumn Header="Why" Width="380" DisplayMemberBinding="{Binding Reason}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- PRIVACY -->
+            <Grid x:Name="PagePrivacy" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="Privacy" FontSize="26" FontWeight="Bold" Margin="0,0,0,16"/>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Network policy" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <TextBlock Text="MesaShield has no maker-run server and collects nothing about you. Everything below controls the only outbound traffic that exists."
+                                           Foreground="{StaticResource TextDimBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                <RadioButton x:Name="RbStandard" GroupName="Priv" Foreground="{StaticResource TextBrush}" Margin="0,4"
+                                             Content="Standard — definition &amp; app updates on; cloud lookup only if you add a key"/>
+                                <RadioButton x:Name="RbStrict" GroupName="Priv" Foreground="{StaticResource TextBrush}" Margin="0,4"
+                                             Content="Strict — no file fingerprints ever leave this machine (blocks cloud lookups)"/>
+                                <RadioButton x:Name="RbOffline" GroupName="Priv" Foreground="{StaticResource TextBrush}" Margin="0,4"
+                                             Content="Offline — MesaShield makes zero internet connections (updates from a local folder only)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <TextBlock Text="Local update mirror:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBox x:Name="TxtMirror" Width="360" Background="{StaticResource PanelLightBrush}" Foreground="{StaticResource TextBrush}" BorderThickness="0" Padding="6,4"/>
+                                </StackPanel>
+                                <Button x:Name="BtnSavePrivacy" Style="{StaticResource ActionButton}" Content="Apply privacy settings" Click="SavePrivacy_Click" HorizontalAlignment="Left" Margin="0,12,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Where MesaShield can connect" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="EndpointsText" Foreground="{StaticResource TextDimBrush}" FontSize="12" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <DockPanel>
+                                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                    <TextBlock Text="Recent outbound connections (audit)" FontSize="16" FontWeight="SemiBold"/>
+                                    <Button Style="{StaticResource SubtleButton}" Content="Refresh" Click="RefreshAudit_Click" DockPanel.Dock="Right" HorizontalAlignment="Right"/>
+                                </DockPanel>
+                                <ListView x:Name="AuditList" Height="180">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Time" Width="150" DisplayMemberBinding="{Binding Time}"/>
+                                            <GridViewColumn Header="Destination" Width="220" DisplayMemberBinding="{Binding Host}"/>
+                                            <GridViewColumn Header="Purpose" Width="150" DisplayMemberBinding="{Binding Purpose}"/>
+                                            <GridViewColumn Header="Result" Width="220" DisplayMemberBinding="{Binding Result}"/>
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Your data" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <TextBlock Text="Delete activity logs older than" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBox x:Name="TxtRetention" Width="50" Background="{StaticResource PanelLightBrush}" Foreground="{StaticResource TextBrush}" BorderThickness="0" Padding="6,4"/>
+                                    <TextBlock Text="days (0 = keep forever)" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                </StackPanel>
+                                <Button Style="{StaticResource DangerButton}" Content="Erase all learned data &amp; logs" Click="EraseData_Click" HorizontalAlignment="Left"/>
+                                <TextBlock Foreground="{StaticResource TextDimBrush}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"
+                                           Text="All models, learned baselines, and logs stay on this machine. Erasing resets what MesaShield has learned; it will re-learn from scratch."/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

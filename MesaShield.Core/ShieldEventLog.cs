@@ -17,6 +17,25 @@ public sealed class ShieldEventLog
     public sealed record ShieldEvent(
         DateTimeOffset Timestamp, string Kind, string Message, string? FilePath = null, string? ThreatName = null);
 
+    /// <summary>Delete monthly log files older than the retention window. 0 days = keep everything.</summary>
+    public void PurgeOlderThan(int retentionDays)
+    {
+        if (retentionDays <= 0) return;
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays);
+        foreach (var file in Directory.EnumerateFiles(_logDirectory, "events-*.jsonl"))
+        {
+            try
+            {
+                // File name is events-yyyy-MM.jsonl; drop files whose month is entirely past the cutoff.
+                var stamp = Path.GetFileNameWithoutExtension(file).Replace("events-", "");
+                if (DateTime.TryParse(stamp + "-01", out var month) &&
+                    new DateTimeOffset(month.AddMonths(1), TimeSpan.Zero) < cutoff)
+                    File.Delete(file);
+            }
+            catch (IOException) { /* skip locked file */ }
+        }
+    }
+
     public Task LogAsync(string kind, string message, string? filePath = null, string? threatName = null) =>
         AppendAsync(new ShieldEvent(DateTimeOffset.UtcNow, kind, message, filePath, threatName));
 

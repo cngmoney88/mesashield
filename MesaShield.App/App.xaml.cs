@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Windows;
 using MesaShield.Core;
 using MesaShield.Core.Ml;
+using MesaShield.Core.Privacy;
 using MesaShield.Windows;
 
 namespace MesaShield.App;
@@ -43,13 +44,18 @@ public partial class App : System.Windows.Application
     public static JobScheduler Scheduler { get; private set; } = null!;
     public static AnomalyLearner Learner { get; private set; } = null!;
     public static NetworkAnomalyLearner NetworkLearner { get; private set; } = null!;
+    public static MesaShield.Core.Net.EgressGuard Egress { get; private set; } = null!;
+    public static EgressWatcher EgressWatch { get; private set; } = null!;
+    public static string EgressStatePath => Path.Combine(DataDirectory, "Models", "egress.json");
     public static MalwareClassifier? Classifier { get; private set; }
+    public static BenignAnomalyModel? BenignModel { get; private set; }
     public static EtwMonitor Etw { get; private set; } = null!;
     public static FleetReporter Fleet { get; private set; } = null!;
     public static long ThreatsHandledTotal;
 
     public static string StatusPathLocal => Path.Combine(DataDirectory, "status.json");
     public static string NetworkModelPath => Path.Combine(DataDirectory, "Models", "network.json");
+    public static string BenignModelPath => Path.Combine(DataDirectory, "Models", "benign.json");
 
     public static string AnomalyModelPath => Path.Combine(DataDirectory, "Models", "anomaly.json");
     public static string ClassifierModelPath => Path.Combine(DataDirectory, "Models", "classifier.json");
@@ -57,6 +63,14 @@ public partial class App : System.Windows.Application
     public static bool StartMinimized { get; private set; }
     private static int _learnerObservationsSinceSave;
     private static System.Threading.Timer? _fleetTimer;
+    private static System.Threading.Timer? _fleetCommandTimer;
+
+    /// <summary>Reload the benign model from disk after (re)training and wire it into the engine.</summary>
+    public static void ReloadBenignModel()
+    {
+        BenignModel = BenignAnomalyModel.Load(BenignModelPath);
+        if (Engine is not null) Engine.BenignModel = Settings.MlClassifierEnabled ? BenignModel : null;
+    }
 
     private static MachineStatus BuildMachineStatus()
     {
@@ -86,14 +100,83 @@ public partial class App : System.Windows.Application
             RecentAlerts24h = recentAlerts,
             LearnerLearning = Learner.IsLearning,
             LearnerObservations = Learner.Observations,
+            DeepMonitoring = Etw?.IsRunning ?? false,
+            Elevated = ElevationManager.IsElevated,
+            EgressMode = Settings.EgressMode.ToString(),
+            PrivacyMode = Settings.PrivacyMode.ToString(),
+            EgressBlocks24h = EgressBlocks24hCount(),
         };
     }
 
-    private static readonly HttpClient Http = new()
+    /// <summary>Execute any fleet commands the dashboard pushed to this machine, then ack them.</summary>
+    private static void ProcessFleetCommands()
+    {
+        var shared = Settings.FleetSharedFolder;
+        if (string.IsNullOrWhiteSpace(shared) || !Settings.FleetReportingEnabled) return;
+        var me = Environment.MachineName;
+
+        foreach (var cmd in FleetCommander.Pending(shared, me))
+        {
+            try
+            {
+                switch (cmd.Type)
+                {
+                    case FleetCommandType.QuickScan:
+                        _ = RunScheduledScanAsync(); break;
+                    case FleetCommandType.FullScan:
+                        var prev = Settings.ScheduledScanScope; Settings.ScheduledScanScope = ScheduledScanScope.FullScan;
+                        _ = RunScheduledScanAsync().ContinueWith(_ => Settings.ScheduledScanScope = prev); break;
+                    case FleetCommandType.UpdateSignatures:
+                        _ = RunScheduledSignatureUpdateAsync(); break;
+                    case FleetCommandType.CheckAppUpdate:
+                        _ = RunScheduledUpdateCheckAsync(); break;
+                    case FleetCommandType.SetPrivacyMode:
+                        if (Enum.TryParse<PrivacyMode>(cmd.Arg, out var pm)) { Settings.PrivacyMode = pm; Privacy.Mode = pm; Settings.Save(); } break;
+                    case FleetCommandType.SetEgressMode:
+                        if (Enum.TryParse<MesaShield.Core.Net.EgressMode>(cmd.Arg, out var em))
+                        {
+                            Settings.EgressMode = em; Egress.Mode = em; Settings.Save();
+                            if (em != MesaShield.Core.Net.EgressMode.Off && !EgressWatch.IsRunning) EgressWatch.Start();
+                        }
+                        break;
+                    case FleetCommandType.Ping:
+                        break;
+                }
+                _ = EventLog.LogAsync("fleet", $"Ran fleet command {cmd.Type} (from {cmd.IssuedBy}).");
+            }
+            catch (Exception ex) { _ = EventLog.LogAsync("error", $"Fleet command {cmd.Type} failed: {ex.Message}"); }
+            finally { FleetCommander.Ack(shared, cmd.Id, me); }
+        }
+
+        try { FleetCommander.Cleanup(shared, TimeSpan.FromDays(7)); } catch { }
+        try { Fleet.Report(); } catch { }   // refresh our status right after acting
+    }
+
+    private static long EgressBlocks24hCount()
+    {
+        try
+        {
+            var since = DateTimeOffset.UtcNow.AddDays(-1);
+            return EventLog.ReadRecentAsync(500).GetAwaiter().GetResult()
+                .Count(e => e.Timestamp >= since && e.Kind == "egress" && e.Message.StartsWith("BLOCK", StringComparison.OrdinalIgnoreCase));
+        }
+        catch { return 0; }
+    }
+
+    /// <summary>The single network-policy chokepoint. Every outbound request passes through it.</summary>
+    public static PrivacyGuard Privacy { get; } = new();
+
+    public static string PrivacyAuditPath => Path.Combine(LogsDirectory, "network-audit.jsonl");
+
+    private static readonly HttpClient Http = new(new PrivacyHandler(Privacy, new HttpClientHandler()))
     {
         Timeout = TimeSpan.FromMinutes(10),
-        DefaultRequestHeaders = { { "User-Agent", "MesaShield/0.2" } },
+        // Deliberately generic User-Agent — no machine name, user, or version fingerprint leaks.
+        DefaultRequestHeaders = { { "User-Agent", "MesaShield" } },
     };
+
+    private static Mutex? _singleInstance;
+    private static EventWaitHandle? _showSignal;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -101,11 +184,31 @@ public partial class App : System.Windows.Application
 
         // Self-install on first run from anywhere that isn't the install location.
         // If it installs and relaunches the installed copy, exit this instance now.
+        // (Done before the single-instance guard so the transient installer never holds the lock.)
         if (Installer.EnsureInstalled(e.Args, out _))
         {
             Shutdown();
             return;
         }
+
+        // Single instance: if MesaShield is already running, bring that one window to the front
+        // and exit. There is only ever one app and one window.
+        _singleInstance = new Mutex(false, "MesaShield.SingleInstance.v1");
+        _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, "MesaShield.ShowWindow.v1");
+        bool owns;
+        try { owns = _singleInstance.WaitOne(TimeSpan.Zero); }
+        catch (AbandonedMutexException) { owns = true; }   // previous instance was killed — we own it now
+        if (!owns)
+        {
+            _showSignal.Set();     // tell the already-running instance to surface its window
+            Shutdown();
+            return;
+        }
+        new Thread(() =>
+        {
+            while (_showSignal!.WaitOne())
+                Current.Dispatcher.Invoke(() => (Current.MainWindow as MainWindow)?.BringToFront());
+        }) { IsBackground = true, Name = "MesaShield-ShowListener" }.Start();
 
         StartMinimized = e.Args.Contains("--minimized") || e.Args.Contains("--silent");
         Directory.CreateDirectory(DataDirectory);
@@ -124,6 +227,20 @@ public partial class App : System.Windows.Application
             DeployConfig.Load(configPath)?.ApplyTo(Settings);
         }
         EventLog = new ShieldEventLog(LogsDirectory);
+
+        // Privacy: apply the network policy and record every outbound decision to an audit log.
+        Privacy.Mode = Settings.PrivacyMode;
+        Directory.CreateDirectory(LogsDirectory);
+        Privacy.Decision += entry =>
+        {
+            try
+            {
+                File.AppendAllText(PrivacyAuditPath,
+                    System.Text.Json.JsonSerializer.Serialize(entry) + Environment.NewLine);
+            }
+            catch { /* audit logging is best-effort */ }
+        };
+        try { EventLog.PurgeOlderThan(Settings.LogRetentionDays); } catch { }
         Quarantine = new QuarantineManager(QuarantineDirectory);
         Updater = new SignatureUpdater(Http, SignaturesDirectory);
         AppUpdater = new UpdateChecker(Http);
@@ -140,12 +257,14 @@ public partial class App : System.Windows.Application
         Learner = AnomalyLearner.Load(AnomalyModelPath);
         NetworkLearner = NetworkAnomalyLearner.Load(NetworkModelPath);
         Classifier = MalwareClassifier.Load(ClassifierModelPath) ?? MalwareClassifier.Baseline();
+        BenignModel = BenignAnomalyModel.Load(BenignModelPath);
 
         Engine = new ScanEngine(Signatures, Patterns, new HeuristicAnalyzer())
         {
             ScriptScanner = Settings.AmsiScriptScanningEnabled ? Amsi : null,
             Reputation = Settings.CloudLookupEnabled ? Reputation : null,
             Classifier = Settings.MlClassifierEnabled ? Classifier : null,
+            BenignModel = Settings.MlClassifierEnabled ? BenignModel : null,
         };
 
         var realTimeOptions = Settings.ToScanOptions();
@@ -155,6 +274,17 @@ public partial class App : System.Windows.Application
         Usb = new UsbWatcher(EventLog);
         Firewall = new FirewallManager(EventLog);
         BehaviorWatch = new BehaviorMonitor(Behavior, EventLog);
+
+        // Egress / data-loss-prevention: watch outbound connections and block data leaving to
+        // unapproved destinations, learning each machine's normal network behavior.
+        Egress = new MesaShield.Core.Net.EgressGuard(NetworkLearner) { Mode = Settings.EgressMode };
+        Egress.Load(EgressStatePath);
+        Egress.Mode = Settings.EgressMode;   // settings win over persisted mode
+        EgressWatch = new EgressWatcher(Egress, Firewall, EventLog);
+        // Surface EVERY outbound connection (allowed, watched, or blocked) so the Traffic screen
+        // shows live activity and you can see exactly where data is going.
+        EgressWatch.Decision += decision => Current.Dispatcher.Invoke(() =>
+            (Current.MainWindow as MainWindow)?.OnEgressDecision(decision));
 
         Usb.DriveInserted += root => Current.Dispatcher.Invoke(() =>
         {
@@ -189,6 +319,7 @@ public partial class App : System.Windows.Application
         if (Settings.ProcessMonitoringEnabled) ProcessWatch.Start();
         if (Settings.UsbAutoScanEnabled) Usb.Start();
         if (Settings.BehaviorGuardEnabled) BehaviorWatch.Start();
+        if (Settings.EgressMode != MesaShield.Core.Net.EgressMode.Off) EgressWatch.Start();
 
         // Deep ETW monitoring (elevated only; degrades gracefully otherwise).
         Etw = new EtwMonitor(Learner, NetworkLearner, EventLog);
@@ -198,6 +329,22 @@ public partial class App : System.Windows.Application
             Current.Dispatcher.Invoke(() => (Current.MainWindow as MainWindow)?.NotifyDeepAnomaly(assessment, context));
         };
         if (Settings.EtwMonitoringEnabled) Etw.Start();
+
+        // If we're running elevated, make deep monitoring permanent: register a scheduled task
+        // that relaunches MesaShield elevated at every logon with no further prompts.
+        if (ElevationManager.IsElevated)
+        {
+            try
+            {
+                var exe = Environment.ProcessPath;
+                if (exe is not null && !ElevationManager.ElevatedAutostartExists())
+                {
+                    ElevationManager.InstallElevatedAutostart(exe);
+                    await EventLog.LogAsync("etw", "Deep monitoring enabled permanently — MesaShield will run elevated at every logon.");
+                }
+            }
+            catch { /* non-fatal */ }
+        }
 
         // Keep the run-at-startup registry entry in sync with the setting.
         try
@@ -217,11 +364,16 @@ public partial class App : System.Windows.Application
         _fleetTimer = new System.Threading.Timer(_ => { try { Fleet.Report(); } catch { } },
             null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
+        // Fleet command channel: poll the shared folder for commands the dashboard pushed to us.
+        _fleetCommandTimer = new System.Threading.Timer(_ => { try { ProcessFleetCommands(); } catch { } },
+            null, TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(45));
+
         Scheduler = new JobScheduler(Settings,
             onSignatureUpdate: RunScheduledSignatureUpdateAsync,
             onScheduledScan: RunScheduledScanAsync,
             onUpdateCheck: RunScheduledUpdateCheckAsync);
         Scheduler.Start();
+        StartSelfDefense();
 
         await EventLog.LogAsync("app", $"MesaShield {CurrentVersion} started.");
 
@@ -253,6 +405,19 @@ public partial class App : System.Windows.Application
     {
         try
         {
+            // Prefer a local mirror if configured (keeps offline machines off the internet entirely).
+            if (!string.IsNullOrWhiteSpace(Settings.LocalSignatureMirror))
+            {
+                var installed = Updater.InstallFromLocalMirror(Settings.LocalSignatureMirror);
+                await Signatures.LoadAsync(SignaturesDirectory);
+                await EventLog.LogAsync("update", $"Signatures updated from local mirror ({installed} file(s)).");
+                return;
+            }
+            if (Settings.PrivacyMode == PrivacyMode.Offline)
+            {
+                await EventLog.LogAsync("update", "Offline mode: skipped internet signature update (set a local mirror to update).");
+                return;
+            }
             await Updater.DownloadRecentAsync();
             await Signatures.LoadAsync(SignaturesDirectory);
             await EventLog.LogAsync("update", "Scheduled signature update completed.");
@@ -282,13 +447,129 @@ public partial class App : System.Windows.Application
 
     private static async Task RunScheduledUpdateCheckAsync()
     {
-        if (string.IsNullOrWhiteSpace(Settings.UpdateChannel)) return;
+        if (string.IsNullOrWhiteSpace(Settings.UpdateChannel) || !Settings.AutoUpdateEnabled) return;
         var result = await AppUpdater.CheckAsync(Settings.UpdateChannel, CurrentVersion);
-        if (result.UpdateAvailable)
+        if (!result.UpdateAvailable) return;
+
+        var release = result.Release!;
+        await EventLog.LogAsync("update", $"App update available: v{release.Version}.");
+
+        if (Settings.AutoInstallUpdates)
         {
-            await EventLog.LogAsync("update", $"App update available: v{result.Release!.Version}.");
-            Current.Dispatcher.Invoke(() => (Current.MainWindow as MainWindow)?.NotifyUpdateAvailable(result.Release!));
+            await AutoInstallUpdateAsync(release);   // fully hands-off — download, verify, install, relaunch
         }
+        else
+        {
+            Current.Dispatcher.Invoke(() => (Current.MainWindow as MainWindow)?.NotifyUpdateAvailable(release));
+        }
+    }
+
+    /// <summary>Download, verify, and install an update with no user interaction (background auto-update).</summary>
+    private static async Task AutoInstallUpdateAsync(ReleaseInfo release)
+    {
+        try
+        {
+            var version = release.Version.TrimStart('v', 'V');
+            var dir = Path.Combine(DataDirectory, "Updates");
+            Directory.CreateDirectory(dir);
+            var fileName = Path.GetFileName(new Uri(release.DownloadUrl).LocalPath);
+            if (string.IsNullOrEmpty(fileName)) fileName = "MesaShield-Setup.exe";
+            var dest = Path.Combine(dir, fileName);
+
+            // DownloadAsync verifies the SHA-256 from the manifest before returning.
+            await AppUpdater.DownloadAsync(release, dest);
+
+            // Downgrade guard: never auto-install something not strictly newer.
+            try
+            {
+                var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(dest);
+                var dv = new Version(info.FileMajorPart, info.FileMinorPart, info.FileBuildPart);
+                var cur = new Version(CurrentVersion.Major, CurrentVersion.Minor, CurrentVersion.Patch);
+                if (dv <= cur) { await EventLog.LogAsync("update", $"Skipped auto-install: served v{dv} is not newer than v{cur}."); return; }
+            }
+            catch { }
+
+            // Strip the internet "mark of the web" (after the hash check) so no SmartScreen prompt.
+            MarkOfTheWeb.Remove(dest);
+
+            await EventLog.LogAsync("update", $"Auto-installing update v{version} (silent).");
+            Current.Dispatcher.Invoke(() =>
+            {
+                if (SelfUpdater.LaunchInstaller(dest, out _))
+                {
+                    (Current.MainWindow as MainWindow)?.PrepareForSilentRestart();
+                    Current.Shutdown();
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            await EventLog.LogAsync("error", $"Auto-update failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>Erase everything MesaShield has learned or recorded on this machine (privacy control).</summary>
+    public static void EraseAllLearnedData()
+    {
+        foreach (var f in new[] { AnomalyModelPath, NetworkModelPath, BenignModelPath })
+            try { if (File.Exists(f)) File.Delete(f); } catch { }
+        try { if (Directory.Exists(LogsDirectory)) foreach (var f in Directory.EnumerateFiles(LogsDirectory)) File.Delete(f); } catch { }
+
+        // Reset in-memory learners so nothing lingers this session.
+        Learner = AnomalyLearner.Load(AnomalyModelPath);
+        NetworkLearner = NetworkAnomalyLearner.Load(NetworkModelPath);
+        BenignModel = BenignAnomalyModel.Load(BenignModelPath);
+        _ = EventLog.LogAsync("privacy", "All learned data and logs erased at user request.");
+    }
+
+    private static CancellationTokenSource? _selfDefenseCts;
+
+    /// <summary>
+    /// Self-defense: every minute, confirm each protection module that's supposed to be on is
+    /// actually running — and restart it if something stopped it (a tamper attempt). Also
+    /// re-registers the elevated autostart task if it was removed. Real malware disables the AV
+    /// first; this makes MesaShield fight back.
+    /// </summary>
+    private static void StartSelfDefense()
+    {
+        _selfDefenseCts = new CancellationTokenSource();
+        var ct = _selfDefenseCts.Token;
+        _ = Task.Run(async () =>
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(1), ct);
+
+                    void Heal(string name, bool shouldRun, bool isRunning, Action restart)
+                    {
+                        if (shouldRun && !isRunning)
+                        {
+                            restart();
+                            _ = EventLog.LogAsync("tamper", $"Protection module '{name}' was not running and has been restarted.");
+                            Current.Dispatcher.Invoke(() =>
+                                (Current.MainWindow as MainWindow)?.NotifyTamper(name));
+                        }
+                    }
+
+                    Heal("Real-time protection", Settings.RealTimeProtectionEnabled, RealTime.IsRunning, () => RealTime.Start());
+                    Heal("Process monitoring", Settings.ProcessMonitoringEnabled, ProcessWatch.IsRunning, () => ProcessWatch.Start());
+                    Heal("Ransomware guard", Settings.BehaviorGuardEnabled, BehaviorWatch.IsRunning, () => BehaviorWatch.Start());
+                    Heal("Egress control", Settings.EgressMode != MesaShield.Core.Net.EgressMode.Off, EgressWatch.IsRunning, () => EgressWatch.Start());
+
+                    // Re-register the elevated autostart if it was removed (only possible while elevated).
+                    if (ElevationManager.IsElevated && !ElevationManager.ElevatedAutostartExists())
+                    {
+                        var exe = Environment.ProcessPath;
+                        if (exe is not null) { ElevationManager.InstallElevatedAutostart(exe);
+                            _ = EventLog.LogAsync("tamper", "Elevated autostart was missing and has been re-registered."); }
+                    }
+                }
+                catch (OperationCanceledException) { break; }
+                catch { /* keep watching */ }
+            }
+        }, ct);
     }
 
     public static string[] QuickScanTargets()
@@ -313,7 +594,10 @@ public partial class App : System.Windows.Application
     {
         try { Learner?.Save(AnomalyModelPath); } catch { /* best-effort */ }
         try { NetworkLearner?.Save(NetworkModelPath); } catch { /* best-effort */ }
+        try { Egress?.Save(EgressStatePath); } catch { /* best-effort */ }
+        EgressWatch?.Dispose();
         _fleetTimer?.Dispose();
+        _fleetCommandTimer?.Dispose();
         Etw?.Dispose();
         Scheduler?.Dispose();
         RealTime?.Dispose();

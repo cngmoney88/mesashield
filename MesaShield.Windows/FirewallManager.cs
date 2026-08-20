@@ -100,6 +100,26 @@ public sealed class FirewallManager
         await _log.LogAsync("firewall", $"Removed {toRemove.Count} rule(s) for {exePath}", exePath);
     }
 
+    /// <summary>Block outbound traffic from an app to one specific remote address (egress control). Requires elevation.</summary>
+    public async Task BlockRemoteForApplicationAsync(string exePath, string remoteAddress, string? reason = null)
+    {
+        var ruleType = Type.GetTypeFromProgID("HNetCfg.FWRule")
+            ?? throw new PlatformNotSupportedException("Windows Firewall COM API not available.");
+        dynamic rule = Activator.CreateInstance(ruleType)!;
+        rule.Name = $"Block {Path.GetFileName(exePath)} → {remoteAddress}";
+        rule.ApplicationName = exePath;
+        rule.RemoteAddresses = remoteAddress;
+        rule.Action = 0;          // BLOCK
+        rule.Direction = 2;       // OUT
+        rule.Enabled = true;
+        rule.Grouping = RuleGroup;
+        rule.Profiles = 0x7FFFFFFF;
+
+        dynamic policy = CreatePolicy();
+        policy.Rules.Add(rule);
+        await _log.LogAsync("egress", $"Blocked {Path.GetFileName(exePath)} from reaching {remoteAddress}. {reason}".TrimEnd(), exePath);
+    }
+
     private static void AddRule(string name, string exePath, bool allow, bool outbound)
     {
         var ruleType = Type.GetTypeFromProgID("HNetCfg.FWRule")

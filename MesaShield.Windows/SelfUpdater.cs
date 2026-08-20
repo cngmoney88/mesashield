@@ -12,6 +12,55 @@ namespace MesaShield.Windows;
 public static class SelfUpdater
 {
     /// <summary>
+    /// The reliable update path: hand off to the downloaded self-installer. A short helper waits
+    /// for THIS app to exit (so nothing is locked), then launches the installer with the normal
+    /// shell — meaning any Windows SmartScreen prompt appears for the user to approve, rather than
+    /// the update silently failing. The installer then installs the new version and relaunches.
+    /// Returns true if the handoff started; the caller should then shut the app down.
+    /// </summary>
+    public static bool LaunchInstaller(string installerExePath, out string message)
+    {
+        message = "";
+        if (!OperatingSystem.IsWindows()) { message = "Only supported on Windows."; return false; }
+        if (!File.Exists(installerExePath) || new FileInfo(installerExePath).Length == 0)
+        {
+            message = "The downloaded installer is missing or empty.";
+            return false;
+        }
+
+        var pid = Environment.ProcessId;
+        var batPath = Path.Combine(Path.GetTempPath(), $"mesashield-apply-{Guid.NewGuid():N}.bat");
+        var script = $"""
+            @echo off
+            :waitloop
+            tasklist /fi "PID eq {pid}" 2>nul | find "{pid}" >nul
+            if not errorlevel 1 (
+                timeout /t 1 /nobreak >nul
+                goto waitloop
+            )
+            start "" "{installerExePath}"
+            del /q "%~f0"
+            """;
+        try
+        {
+            File.WriteAllText(batPath, script);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c \"{batPath}\"",
+                CreateNoWindow = true,
+                UseShellExecute = false,
+            });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Begin applying <paramref name="downloadedPath"/> (an .exe or a .zip containing the exe).
     /// On success this launches the helper and returns true; the caller should then shut the app down.
     /// </summary>

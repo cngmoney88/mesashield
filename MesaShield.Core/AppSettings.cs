@@ -76,6 +76,9 @@ public sealed class AppSettings
     /// <summary>On-device anomaly learning (learns this machine's normal, flags outliers).</summary>
     public bool AdaptiveLearningEnabled { get; set; } = true;
 
+    /// <summary>Egress / data-loss-prevention mode: Off, Observe (alert only), or Enforce (block).</summary>
+    public Net.EgressMode EgressMode { get; set; } = Net.EgressMode.Observe;
+
     /// <summary>Offline ML malware classifier layer during scans.</summary>
     public bool MlClassifierEnabled { get; set; } = true;
 
@@ -87,6 +90,14 @@ public sealed class AppSettings
     public ScheduledScanScope ScheduledScanScope { get; set; } = ScheduledScanScope.QuickScan;
     public Schedule SignatureUpdateSchedule { get; set; } = new() { Frequency = ScheduleFrequency.Daily, Hour = 3 };
 
+    // Privacy
+    /// <summary>Network policy: Standard, Strict (no fingerprints leave), or Offline (no internet at all).</summary>
+    public Privacy.PrivacyMode PrivacyMode { get; set; } = Privacy.PrivacyMode.Standard;
+    /// <summary>Optional local folder to pull signature updates from instead of the internet (offline fleets).</summary>
+    public string LocalSignatureMirror { get; set; } = "";
+    /// <summary>Auto-delete activity logs older than this many days. 0 = keep forever.</summary>
+    public int LogRetentionDays { get; set; } = 90;
+
     // Cloud reputation
     public bool CloudLookupEnabled { get; set; }
     /// <summary>VirusTotal API key. Optional — cloud lookups are disabled without it.</summary>
@@ -96,9 +107,13 @@ public sealed class AppSettings
 
     // Auto-update (of the app itself)
     public bool AutoUpdateEnabled { get; set; } = true;
-    /// <summary>URL of a JSON release manifest, or a GitHub "owner/repo" for the Releases API.</summary>
-    public string UpdateChannel { get; set; } = "";
-    public Schedule UpdateCheckSchedule { get; set; } = new() { Frequency = ScheduleFrequency.Daily, Hour = 4 };
+    /// <summary>Install found updates automatically in the background, with no prompt or click.</summary>
+    public bool AutoInstallUpdates { get; set; } = true;
+    /// <summary>URL of a JSON release manifest, or a GitHub "owner/repo" for the Releases API.
+    /// Pre-configured to the MesaShield repo so machines self-update out of the box.</summary>
+    public string UpdateChannel { get; set; } = "cngmoney88/mesashield";
+    /// <summary>Check for app updates every few hours so machines stay current without anyone looking.</summary>
+    public Schedule UpdateCheckSchedule { get; set; } = new() { Frequency = ScheduleFrequency.Hourly, Minute = 15 };
 
     // Fleet dashboard
     public bool FleetReportingEnabled { get; set; } = true;

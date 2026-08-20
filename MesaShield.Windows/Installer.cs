@@ -42,7 +42,20 @@ public static class Installer
         {
             Directory.CreateDirectory(InstallDirectory);
 
-            // Copy ourselves in. If the target is locked (already running), just launch it.
+            // DOWNGRADE GUARD: never let an older installer overwrite a newer installed build.
+            // (This is what caused "it reverts to v0.8.0" — an old installer from a stale GitHub
+            // release was replacing a newer install. Now the old one refuses and launches the newer.)
+            if (File.Exists(InstalledExePath) && IsOlderThanInstalled(currentExe))
+            {
+                Process.Start(new ProcessStartInfo { FileName = InstalledExePath, Arguments = "--installed", UseShellExecute = true });
+                message = "A newer MesaShield is already installed — kept it and launched it (downgrade blocked).";
+                return true;
+            }
+
+            // The installed copy is likely already running (it auto-starts to the tray), which
+            // would lock its .exe and make the copy below fail — the old cause of "it reverts to
+            // the old version." Stop any running installed instance first, then copy with retries.
+            StopInstalledInstances();
             var copied = TryCopy(currentExe, InstalledExePath);
 
             // Carry a deployment config (if the admin shipped one beside the installer) into the
@@ -73,18 +86,67 @@ public static class Installer
         }
     }
 
-    private static bool TryCopy(string source, string dest)
+    /// <summary>True if the running installer's version is older than the currently-installed exe.</summary>
+    private static bool IsOlderThanInstalled(string currentExe)
     {
         try
         {
-            File.Copy(source, dest, overwrite: true);
-            return true;
+            static Version Read(string path)
+            {
+                var v = System.Diagnostics.FileVersionInfo.GetVersionInfo(path);
+                return new Version(v.FileMajorPart, v.FileMinorPart, v.FileBuildPart, v.FilePrivatePart);
+            }
+            return Read(currentExe) < Read(InstalledExePath);
         }
-        catch (IOException)
+        catch { return false; }   // if we can't tell, don't block the install
+    }
+
+    /// <summary>Terminate any MesaShield already running from the install location so its file can be replaced.</summary>
+    private static void StopInstalledInstances()
+    {
+        foreach (var p in Process.GetProcessesByName("MesaShield.App"))
         {
-            return false; // target locked (installed copy already running)
+            if (p.Id == Environment.ProcessId) continue;
+            try
+            {
+                string? path = null;
+                try { path = p.MainModule?.FileName; } catch { /* access denied — fall through and stop it anyway */ }
+                if (path is null || PathsEqual(path, InstalledExePath))
+                {
+                    p.Kill(entireProcessTree: true);
+                    p.WaitForExit(5000);
+                }
+            }
+            catch { /* already gone / protected */ }
         }
     }
+
+    private static bool TryCopy(string source, string dest)
+    {
+        // Retry a few times — the previous instance may take a moment to release the file.
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                File.Copy(source, dest, overwrite: true);
+                return true;
+            }
+            catch (IOException) when (attempt < 4)
+            {
+                Thread.Sleep(700);
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException) when (attempt < 4)
+            {
+                Thread.Sleep(700);
+            }
+        }
+        return false;
+    }
+
 
     private static void CreateShortcuts()
     {

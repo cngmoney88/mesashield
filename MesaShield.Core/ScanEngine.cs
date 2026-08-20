@@ -23,6 +23,9 @@ public sealed class ScanEngine
     /// <summary>Optional offline ML malware classifier (scores PE files locally).</summary>
     public Ml.MalwareClassifier? Classifier { get; set; }
 
+    /// <summary>Optional one-class "known-good" model that flags files unlike normal software.</summary>
+    public Ml.BenignAnomalyModel? BenignModel { get; set; }
+
     private static readonly HashSet<string> ScriptExtensions = new(StringComparer.OrdinalIgnoreCase)
     { ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".bat", ".cmd", ".hta" };
 
@@ -138,6 +141,25 @@ public sealed class ScanEngine
                             Severity = ThreatSeverity.Malicious,
                             Sha256 = sha256,
                             Detail = "Flagged by the Windows Antimalware Scan Interface (script/runtime content).",
+                        });
+                    }
+                }
+
+                // Layer: one-class "known-good" model — flags PE files that don't resemble normal
+                // software. Conservative (suspicious only) and only when nothing else already fired.
+                if (BenignModel is { IsUsable: true } && findings.Count == 0 && HeuristicAnalyzer.IsPeFile(head))
+                {
+                    var verdict = BenignModel.Classify(head, info.Length);
+                    if (verdict is { } v)
+                    {
+                        findings.Add(new ThreatFinding
+                        {
+                            FilePath = path,
+                            ThreatName = "ML.Unfamiliar",
+                            Method = DetectionMethod.Anomaly,
+                            Severity = v.Severity,
+                            Sha256 = sha256,
+                            Detail = $"Doesn't match the profile of known-good software (distance {v.Distance:F1}, model {BenignModel.Version}).",
                         });
                     }
                 }

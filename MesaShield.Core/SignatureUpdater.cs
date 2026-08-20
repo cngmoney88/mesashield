@@ -70,6 +70,26 @@ public sealed class SignatureUpdater
         return count;
     }
 
+    /// <summary>
+    /// Copy signature files from a local mirror folder (e.g. a share on your server) instead of
+    /// the internet, so offline machines never contact a third party for definitions. Returns the
+    /// number of *.hashes files installed.
+    /// </summary>
+    public int InstallFromLocalMirror(string mirrorFolder)
+    {
+        if (!Directory.Exists(mirrorFolder)) return 0;
+        var installed = 0;
+        foreach (var src in Directory.EnumerateFiles(mirrorFolder, "*.hashes"))
+        {
+            File.Copy(src, Path.Combine(_signaturesDirectory, Path.GetFileName(src)), overwrite: true);
+            installed++;
+        }
+        var manifest = Path.Combine(mirrorFolder, "manifest.json");
+        if (File.Exists(manifest))
+            File.Copy(manifest, Path.Combine(_signaturesDirectory, "manifest.json"), overwrite: true);
+        return installed;
+    }
+
     /// <summary>Download the recent-additions feed and merge into an incremental file.</summary>
     public async Task<int> DownloadRecentAsync(
         IProgress<string>? progress = null, CancellationToken ct = default)
