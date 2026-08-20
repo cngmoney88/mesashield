@@ -1,0 +1,8 @@
+{
+  "_comment": "Host this JSON somewhere reachable (a web server, GitHub Pages, an S3 bucket) and put its URL in MesaShield Settings > Update source. Or skip this file entirely and use a GitHub 'owner/repo' as the update source, in which case MesaShield reads your GitHub Releases directly. When you publish a new build, bump 'version', upload the package, and set 'downloadUrl' + 'sha256'.",
+  "version": "0.2.0",
+  "notes": "AMSI scanning, ransomware guard, cloud reputation, tray, scheduling, auto-update.",
+  "downloadUrl": "https://example.com/downloads/MesaShield-0.2.0.zip",
+  "sha256": "PUT_THE_SHA256_OF_THE_ZIP_HERE",
+  "mandatory": false
+}

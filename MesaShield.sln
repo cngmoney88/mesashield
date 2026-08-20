@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MesaShield.Core", "MesaShield.Core\MesaShield.Core.csproj", "{08E84CED-492C-4399-AE03-98B050010EA9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MesaShield.Tests", "MesaShield.Tests\MesaShield.Tests.csproj", "{02340FBB-05F0-41FE-AC12-9F6FE1D347BE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MesaShield.App", "MesaShield.App\MesaShield.App.csproj", "{B286B031-C6DE-437F-9AE5-A237E1A1B69C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{08E84CED-492C-4399-AE03-98B050010EA9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{08E84CED-492C-4399-AE03-98B050010EA9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{08E84CED-492C-4399-AE03-98B050010EA9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{08E84CED-492C-4399-AE03-98B050010EA9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{02340FBB-05F0-41FE-AC12-9F6FE1D347BE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{02340FBB-05F0-41FE-AC12-9F6FE1D347BE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{02340FBB-05F0-41FE-AC12-9F6FE1D347BE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{02340FBB-05F0-41FE-AC12-9F6FE1D347BE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B286B031-C6DE-437F-9AE5-A237E1A1B69C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B286B031-C6DE-437F-9AE5-A237E1A1B69C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B286B031-C6DE-437F-9AE5-A237E1A1B69C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B286B031-C6DE-437F-9AE5-A237E1A1B69C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

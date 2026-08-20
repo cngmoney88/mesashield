@@ -1,0 +1,10 @@
+{
+  "_comment": "Ship this next to MesaShield-Setup.exe (renamed to MesaShield.deploy.json) so every machine comes up pre-configured. Only the fields you include are applied. Edit the values for your shop.",
+  "FleetSharedFolder": "\\\\SERVER\\MesaShield\\status",
+  "UpdateChannel": "YOUR-GITHUB-USERNAME/mesashield",
+  "FleetReportingEnabled": true,
+  "AdaptiveLearningEnabled": true,
+  "MlClassifierEnabled": true,
+  "AutoUpdateEnabled": true,
+  "RunAtStartup": true
+}

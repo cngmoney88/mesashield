@@ -1,0 +1,367 @@
+<Window x:Class="MesaShield.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MesaShield Security" Height="760" Width="1180" MinHeight="600" MinWidth="960"
+        Background="{StaticResource BgBrush}" WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Sidebar -->
+        <Border Grid.Column="0" Background="{StaticResource PanelBrush}">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Margin="0,24,0,16">
+                    <TextBlock Text="🛡 MesaShield" FontSize="20" FontWeight="Bold" Margin="20,0"/>
+                    <TextBlock Text="Security Center" FontSize="12" Foreground="{StaticResource TextDimBrush}" Margin="20,2,0,0"/>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <Button x:Name="NavDashboard" Style="{StaticResource NavButton}" Content="⌂   Dashboard" Click="Nav_Click" Tag="Dashboard"/>
+                    <Button x:Name="NavScan" Style="{StaticResource NavButton}" Content="🔍   Scan" Click="Nav_Click" Tag="Scan"/>
+                    <Button x:Name="NavQuarantine" Style="{StaticResource NavButton}" Content="🔒   Quarantine" Click="Nav_Click" Tag="Quarantine"/>
+                    <Button x:Name="NavFirewall" Style="{StaticResource NavButton}" Content="🌐   Firewall" Click="Nav_Click" Tag="Firewall"/>
+                    <Button x:Name="NavFleet" Style="{StaticResource NavButton}" Content="🖥   Fleet" Click="Nav_Click" Tag="Fleet"/>
+                    <Button x:Name="NavActivity" Style="{StaticResource NavButton}" Content="📋   Activity" Click="Nav_Click" Tag="Activity"/>
+                    <Button x:Name="NavSettings" Style="{StaticResource NavButton}" Content="⚙   Updates" Click="Nav_Click" Tag="Settings"/>
+                </StackPanel>
+                <TextBlock DockPanel.Dock="Bottom" x:Name="VersionText" Text="MesaShield 0.1.0"
+                           Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="20,0,0,16" VerticalAlignment="Bottom"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Pages -->
+        <Grid Grid.Column="1" Margin="24">
+
+            <!-- DASHBOARD -->
+            <Grid x:Name="PageDashboard">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="Dashboard" FontSize="26" FontWeight="Bold" Margin="0,0,0,20"/>
+                <UniformGrid Grid.Row="1" Columns="3" Margin="0,0,0,16">
+                    <Border Style="{StaticResource Card}" Margin="0,0,8,0">
+                        <StackPanel>
+                            <TextBlock Text="Real-time protection" Foreground="{StaticResource TextDimBrush}" FontSize="13"/>
+                            <TextBlock x:Name="RealTimeStatus" Text="Off" FontSize="24" FontWeight="Bold" Margin="0,6,0,4"/>
+                            <Button x:Name="RealTimeToggle" Style="{StaticResource ActionButton}" Content="Turn on" Click="RealTimeToggle_Click" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Margin="8,0">
+                        <StackPanel>
+                            <TextBlock Text="Signatures" Foreground="{StaticResource TextDimBrush}" FontSize="13"/>
+                            <TextBlock x:Name="SignatureCount" Text="0" FontSize="24" FontWeight="Bold" Margin="0,6,0,4"/>
+                            <TextBlock x:Name="SignatureUpdated" Text="Never updated" Foreground="{StaticResource TextDimBrush}" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Margin="8,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Threats handled" Foreground="{StaticResource TextDimBrush}" FontSize="13"/>
+                            <TextBlock x:Name="ThreatCount" Text="0" FontSize="24" FontWeight="Bold" Margin="0,6,0,4"/>
+                            <TextBlock x:Name="QuarantineCount" Text="0 in quarantine" Foreground="{StaticResource TextDimBrush}" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                </UniformGrid>
+                <Border Grid.Row="2" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="Recent activity" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                        <ListView x:Name="DashboardActivity">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Time" Width="150" DisplayMemberBinding="{Binding Time}"/>
+                                    <GridViewColumn Header="Event" Width="110" DisplayMemberBinding="{Binding Kind}"/>
+                                    <GridViewColumn Header="Details" Width="560" DisplayMemberBinding="{Binding Message}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- SCAN -->
+            <Grid x:Name="PageScan" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="Scan" FontSize="26" FontWeight="Bold" Margin="0,0,0,20"/>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,16">
+                    <Button x:Name="QuickScanButton" Style="{StaticResource ActionButton}" Content="Quick scan" Click="QuickScan_Click" Margin="0,0,10,0"/>
+                    <Button x:Name="FullScanButton" Style="{StaticResource SubtleButton}" Content="Full scan (all drives)" Click="FullScan_Click" Margin="0,0,10,0"/>
+                    <Button x:Name="CustomScanButton" Style="{StaticResource SubtleButton}" Content="Scan a folder…" Click="CustomScan_Click" Margin="0,0,10,0"/>
+                    <Button x:Name="CancelScanButton" Style="{StaticResource DangerButton}" Content="Cancel" Click="CancelScan_Click" Visibility="Collapsed"/>
+                </StackPanel>
+                <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock x:Name="ScanStatusText" Text="Ready to scan." FontSize="14"/>
+                        <ProgressBar x:Name="ScanProgressBar" Height="8" Margin="0,10,0,4" IsIndeterminate="False"
+                                     Background="{StaticResource PanelLightBrush}" Foreground="{StaticResource AccentBrush}" BorderThickness="0"/>
+                        <TextBlock x:Name="ScanCurrentFile" Foreground="{StaticResource TextDimBrush}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Row="3" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="Findings" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Style="{StaticResource DangerButton}" Content="Quarantine selected" Click="QuarantineSelected_Click" Margin="0,0,10,0"/>
+                            <Button Style="{StaticResource SubtleButton}" Content="Quarantine all malicious" Click="QuarantineAll_Click"/>
+                        </StackPanel>
+                        <ListView x:Name="FindingsList" SelectionMode="Extended">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Severity" Width="90" DisplayMemberBinding="{Binding Severity}"/>
+                                    <GridViewColumn Header="Threat" Width="200" DisplayMemberBinding="{Binding ThreatName}"/>
+                                    <GridViewColumn Header="File" Width="330" DisplayMemberBinding="{Binding FilePath}"/>
+                                    <GridViewColumn Header="Detail" Width="260" DisplayMemberBinding="{Binding Detail}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- QUARANTINE -->
+            <Grid x:Name="PageQuarantine" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="Quarantine" FontSize="26" FontWeight="Bold" Margin="0,0,0,20"/>
+                <Border Grid.Row="1" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="Files here are encrypted and cannot run. Restore only files you are sure are safe."
+                                   Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,10"/>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Style="{StaticResource SubtleButton}" Content="Restore selected" Click="RestoreQuarantine_Click" Margin="0,0,10,0"/>
+                            <Button Style="{StaticResource DangerButton}" Content="Delete selected permanently" Click="DeleteQuarantine_Click"/>
+                        </StackPanel>
+                        <ListView x:Name="QuarantineList" SelectionMode="Extended">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Quarantined" Width="150" DisplayMemberBinding="{Binding When}"/>
+                                    <GridViewColumn Header="Threat" Width="200" DisplayMemberBinding="{Binding ThreatName}"/>
+                                    <GridViewColumn Header="Original location" Width="420" DisplayMemberBinding="{Binding OriginalPath}"/>
+                                    <GridViewColumn Header="Size" Width="90" DisplayMemberBinding="{Binding Size}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- FIREWALL -->
+            <Grid x:Name="PageFirewall" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="Firewall" FontSize="26" FontWeight="Bold" Margin="0,0,0,20"/>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,16">
+                    <Button Style="{StaticResource ActionButton}" Content="Refresh connections" Click="RefreshConnections_Click" Margin="0,0,10,0"/>
+                    <Button Style="{StaticResource DangerButton}" Content="Block selected app" Click="BlockApp_Click" Margin="0,0,10,0"/>
+                    <Button Style="{StaticResource SubtleButton}" Content="Unblock selected app" Click="UnblockApp_Click" Margin="0,0,10,0"/>
+                    <TextBlock x:Name="FirewallStateText" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}"/>
+                </StackPanel>
+                <Border Grid.Row="2" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="Active connections — who your computer is talking to right now"
+                                   FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                        <ListView x:Name="ConnectionsList">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Application" Width="180" DisplayMemberBinding="{Binding ProcessName}"/>
+                                    <GridViewColumn Header="PID" Width="60" DisplayMemberBinding="{Binding ProcessId}"/>
+                                    <GridViewColumn Header="Remote address" Width="200" DisplayMemberBinding="{Binding Remote}"/>
+                                    <GridViewColumn Header="Local" Width="160" DisplayMemberBinding="{Binding Local}"/>
+                                    <GridViewColumn Header="Executable" Width="280" DisplayMemberBinding="{Binding ExecutablePath}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- FLEET -->
+            <Grid x:Name="PageFleet" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <DockPanel Margin="0,0,0,16">
+                    <TextBlock Text="Fleet" FontSize="26" FontWeight="Bold"/>
+                    <Button Style="{StaticResource SubtleButton}" Content="Refresh" Click="RefreshFleet_Click" HorizontalAlignment="Right" DockPanel.Dock="Right"/>
+                </DockPanel>
+                <TextBlock Grid.Row="1" x:Name="FleetStatusText" Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,12" TextWrapping="Wrap"/>
+                <Border Grid.Row="2" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="All Mesa Fab machines reporting to the shared folder" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                        <ListView x:Name="FleetList">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Machine" Width="150" DisplayMemberBinding="{Binding Machine}"/>
+                                    <GridViewColumn Header="Health" Width="100" DisplayMemberBinding="{Binding Health}"/>
+                                    <GridViewColumn Header="Version" Width="70" DisplayMemberBinding="{Binding Version}"/>
+                                    <GridViewColumn Header="Protection" Width="100" DisplayMemberBinding="{Binding Protection}"/>
+                                    <GridViewColumn Header="Signatures" Width="90" DisplayMemberBinding="{Binding Signatures}"/>
+                                    <GridViewColumn Header="Alerts 24h" Width="80" DisplayMemberBinding="{Binding Alerts}"/>
+                                    <GridViewColumn Header="Quarantine" Width="80" DisplayMemberBinding="{Binding Quarantine}"/>
+                                    <GridViewColumn Header="Learning" Width="120" DisplayMemberBinding="{Binding Learning}"/>
+                                    <GridViewColumn Header="Last seen" Width="140" DisplayMemberBinding="{Binding LastSeen}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- ACTIVITY -->
+            <Grid x:Name="PageActivity" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <DockPanel Margin="0,0,0,20">
+                    <TextBlock Text="Activity log" FontSize="26" FontWeight="Bold"/>
+                    <Button Style="{StaticResource SubtleButton}" Content="Refresh" Click="RefreshActivity_Click" HorizontalAlignment="Right" DockPanel.Dock="Right"/>
+                </DockPanel>
+                <Border Grid.Row="1" Style="{StaticResource Card}">
+                    <ListView x:Name="ActivityList">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Time" Width="160" DisplayMemberBinding="{Binding Time}"/>
+                                <GridViewColumn Header="Kind" Width="100" DisplayMemberBinding="{Binding Kind}"/>
+                                <GridViewColumn Header="Message" Width="420" DisplayMemberBinding="{Binding Message}"/>
+                                <GridViewColumn Header="File" Width="220" DisplayMemberBinding="{Binding FilePath}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </Border>
+            </Grid>
+
+            <!-- SETTINGS -->
+            <Grid x:Name="PageSettings" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="Settings" FontSize="26" FontWeight="Bold" Margin="0,0,0,16"/>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <!-- Protection modules -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Protection modules" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                <CheckBox x:Name="ChkRealTime" Content="Real-time file protection (Downloads, Desktop, Temp, USB)" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <CheckBox x:Name="ChkProcess" Content="Process monitoring (scan every program that launches)" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <CheckBox x:Name="ChkBehavior" Content="Ransomware behavior guard (canary files + mass-encryption detection)" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <CheckBox x:Name="ChkAmsi" Content="AMSI script scanning (catch obfuscated/fileless scripts)" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <CheckBox x:Name="ChkUsb" Content="Auto-scan USB drives on insertion" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <CheckBox x:Name="ChkAdaptive" Content="Adaptive learning (learns this machine's normal and flags anomalies — fully on-device)" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <CheckBox x:Name="ChkMl" Content="Offline ML malware classifier (scores unknown files locally)" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <CheckBox x:Name="ChkEtw" Content="Deep monitoring via ETW (live process + network telemetry — needs admin)" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <TextBlock x:Name="LearnerStatusText" Foreground="{StaticResource TextDimBrush}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Schedules -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Scheduled scans &amp; updates" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4">
+                                    <TextBlock Text="Scan:" Width="80" VerticalAlignment="Center"/>
+                                    <ComboBox x:Name="CmbScanFreq" Width="110" Margin="0,0,10,0"/>
+                                    <ComboBox x:Name="CmbScanScope" Width="120" Margin="0,0,10,0"/>
+                                    <TextBlock Text="at hour" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBox x:Name="TxtScanHour" Width="44" Background="{StaticResource PanelLightBrush}" Foreground="{StaticResource TextBrush}" BorderThickness="0" Padding="6,4"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,4">
+                                    <TextBlock Text="Signatures:" Width="80" VerticalAlignment="Center"/>
+                                    <ComboBox x:Name="CmbSigFreq" Width="110" Margin="0,0,10,0"/>
+                                    <TextBlock Text="at hour" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBox x:Name="TxtSigHour" Width="44" Background="{StaticResource PanelLightBrush}" Foreground="{StaticResource TextBrush}" BorderThickness="0" Padding="6,4"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Signature database -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Malware signature database" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="UpdateStatusText" Text="" Foreground="{StaticResource TextDimBrush}" Margin="0,8,0,12" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="FullUpdateButton" Style="{StaticResource ActionButton}" Content="Download full database (~50 MB)" Click="FullUpdate_Click" Margin="0,0,10,0"/>
+                                    <Button x:Name="QuickUpdateButton" Style="{StaticResource SubtleButton}" Content="Get latest signatures" Click="QuickUpdate_Click"/>
+                                </StackPanel>
+                                <TextBlock Foreground="{StaticResource TextDimBrush}" FontSize="12" Margin="0,12,0,0" TextWrapping="Wrap"
+                                           Text="Signatures come from MalwareBazaar (abuse.ch), a free community feed of confirmed malware hashes."/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Cloud reputation -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Cloud reputation (VirusTotal)" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <CheckBox x:Name="ChkCloud" Content="Enable cloud lookups for suspicious files" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,6">
+                                    <TextBlock Text="API key:" Width="80" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TxtVtKey" Width="360" Background="{StaticResource PanelLightBrush}" Foreground="{StaticResource TextBrush}" BorderThickness="0" Padding="6,4"/>
+                                </StackPanel>
+                                <TextBlock Foreground="{StaticResource TextDimBrush}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"
+                                           Text="Get a free API key at virustotal.com. Lookups run only on already-suspicious files to stay within the free rate limit."/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- App updates + startup -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="App updates &amp; startup" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <CheckBox x:Name="ChkAutoUpdate" Content="Automatically check for new MesaShield versions" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,6">
+                                    <TextBlock Text="Update source:" Width="100" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TxtUpdateChannel" Width="340" Background="{StaticResource PanelLightBrush}" Foreground="{StaticResource TextBrush}" BorderThickness="0" Padding="6,4"/>
+                                    <Button x:Name="BtnCheckUpdate" Style="{StaticResource SubtleButton}" Content="Check now" Click="CheckUpdate_Click" Margin="10,0,0,0"/>
+                                </StackPanel>
+                                <TextBlock Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="100,2,0,8"
+                                           Text="A GitHub 'owner/repo' or a URL to a release manifest JSON."/>
+                                <CheckBox x:Name="ChkRunAtStartup" Content="Start MesaShield when I sign in" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <CheckBox x:Name="ChkNotifications" Content="Show notifications" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Fleet -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Fleet dashboard" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <CheckBox x:Name="ChkFleet" Content="Report this machine's status to the shared folder" Foreground="{StaticResource TextBrush}" Margin="0,4"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,6">
+                                    <TextBlock Text="Shared folder:" Width="100" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TxtFleetFolder" Width="360" Background="{StaticResource PanelLightBrush}" Foreground="{StaticResource TextBrush}" BorderThickness="0" Padding="6,4"/>
+                                </StackPanel>
+                                <TextBlock Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="100,2,0,0"
+                                           Text="e.g. \\SERVER\MesaShield\status — a folder on your server every machine can reach. Stays on your network; nothing goes to the cloud."/>
+                            </StackPanel>
+                        </Border>
+
+                        <Button x:Name="BtnSaveSettings" Style="{StaticResource ActionButton}" Content="Save settings" Click="SaveSettings_Click" HorizontalAlignment="Left" Margin="0,0,0,20"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- UPDATE BANNER (overlays all pages) -->
+            <Border x:Name="UpdateBanner" Visibility="Collapsed" VerticalAlignment="Top"
+                    Background="{StaticResource AccentBrush}" CornerRadius="10" Padding="16,12">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource SubtleButton}" Content="Update now" Click="DownloadUpdate_Click" Margin="10,0,0,0"/>
+                    <Button DockPanel.Dock="Right" Content="✕" Background="Transparent" BorderThickness="0" Foreground="White" Cursor="Hand" Click="DismissBanner_Click"/>
+                    <TextBlock x:Name="UpdateBannerText" Foreground="White" VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

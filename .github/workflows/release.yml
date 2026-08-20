@@ -1,0 +1,82 @@
+name: Build and release MesaShield
+
+# Runs whenever you push a version tag like v0.3.0. It builds the app, runs the
+# tests, publishes the single-file .exe, generates the release manifest MesaShield's
+# auto-updater reads, and attaches both to a GitHub Release. From then on, every
+# copy of MesaShield pointed at this repo updates itself automatically.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # needed to create the Release
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore and test
+        run: |
+          dotnet test MesaShield.Tests/MesaShield.Tests.csproj -c Release
+
+      - name: Publish self-contained single-file exe (zero prerequisites on target machines)
+        run: >
+          dotnet publish MesaShield.App/MesaShield.App.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+
+      - name: Name the asset MesaShield-Setup.exe
+        shell: pwsh
+        run: Copy-Item publish/MesaShield.App.exe publish/MesaShield-Setup.exe -Force
+
+      # Optional Authenticode signing — removes the SmartScreen "unknown publisher" warning.
+      # Add two repo secrets to enable: CODE_SIGN_PFX_BASE64 (base64 of your .pfx) and
+      # CODE_SIGN_PASSWORD. Without them, this step is skipped and the build stays unsigned.
+      - name: Code sign (if a certificate is configured)
+        if: ${{ secrets.CODE_SIGN_PFX_BASE64 != '' }}
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String("${{ secrets.CODE_SIGN_PFX_BASE64 }}"))
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+                      Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1
+          & $signtool.FullName sign /f "$env:RUNNER_TEMP\cert.pfx" /p "${{ secrets.CODE_SIGN_PASSWORD }}" `
+            /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 publish/MesaShield-Setup.exe
+          Remove-Item "$env:RUNNER_TEMP\cert.pfx" -Force
+
+      - name: Compute version and hash
+        id: meta
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          $hash = (Get-FileHash publish/MesaShield-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "sha256=$hash"     >> $env:GITHUB_OUTPUT
+
+      - name: Write release manifest
+        shell: pwsh
+        run: |
+          $manifest = @{
+            version     = "${{ steps.meta.outputs.version }}"
+            notes       = "MesaShield ${{ github.ref_name }}"
+            downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/MesaShield-Setup.exe"
+            sha256      = "${{ steps.meta.outputs.sha256 }}"
+            mandatory   = $false
+          } | ConvertTo-Json
+          $manifest | Out-File -FilePath publish/latest.json -Encoding utf8
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            publish/MesaShield-Setup.exe
+            publish/latest.json
