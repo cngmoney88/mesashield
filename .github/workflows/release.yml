@@ -41,15 +41,20 @@ jobs:
 
       # Optional Authenticode signing — removes the SmartScreen "unknown publisher" warning.
       # Add two repo secrets to enable: CODE_SIGN_PFX_BASE64 (base64 of your .pfx) and
-      # CODE_SIGN_PASSWORD. Without them, this step is skipped and the build stays unsigned.
+      # CODE_SIGN_PASSWORD. Without them, this step no-ops and the build stays unsigned.
+      # (The secret is read into env and checked in-script, because GitHub does not allow the
+      # `secrets` context inside a step `if:` condition.)
       - name: Code sign (if a certificate is configured)
-        if: ${{ secrets.CODE_SIGN_PFX_BASE64 != '' }}
         shell: pwsh
+        env:
+          PFX_B64: ${{ secrets.CODE_SIGN_PFX_BASE64 }}
+          PFX_PW: ${{ secrets.CODE_SIGN_PASSWORD }}
         run: |
-          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String("${{ secrets.CODE_SIGN_PFX_BASE64 }}"))
+          if ([string]::IsNullOrWhiteSpace($env:PFX_B64)) { Write-Host "No signing certificate configured — skipping."; exit 0 }
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String($env:PFX_B64))
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
                       Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1
-          & $signtool.FullName sign /f "$env:RUNNER_TEMP\cert.pfx" /p "${{ secrets.CODE_SIGN_PASSWORD }}" `
+          & $signtool.FullName sign /f "$env:RUNNER_TEMP\cert.pfx" /p $env:PFX_PW `
             /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 publish/MesaShield-Setup.exe
           Remove-Item "$env:RUNNER_TEMP\cert.pfx" -Force
 
