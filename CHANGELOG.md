@@ -1,5 +1,19 @@
 # MesaShield changelog
 
+## v0.20.0 — one app, truly hands-off updates
+- **Updates now install themselves — no button, no clicking.** MesaShield checks for a new version
+  shortly after it starts and then every hour (not just once a day), downloads and verifies it, and
+  installs it silently in the background. You never search for an update or click "update" again.
+- **MesaShield can no longer block its own updates.** The data-loss firewall now always allows
+  MesaShield's own traffic and its update/signature services (GitHub, abuse.ch, VirusTotal). A bug
+  where Enforce mode blocked the app's own connection to GitHub — and stopped it updating — is gone.
+- **Enforce mode no longer blocks your normal apps.** It now blocks the real thing it should: bulk
+  data leaving to a brand-new destination (the exfiltration fingerprint) and anything you've
+  explicitly blocked. Ordinary connections to new servers — how browsers, OneDrive, and updates
+  normally work — are watched and logged, not cut. No more false alarms breaking everyday work.
+- **One app, one instance.** A single install that sets itself up, runs on its own, and can't be
+  opened twice.
+
 ## v0.19.0 — always-on Windows Service (permanent protection)
 - **MesaShield now runs as a true Windows Service.** The protection engine (real-time scanning,
   ransomware guard, egress/DLP, deep ETW monitoring, adaptive learning, updates, fleet) was

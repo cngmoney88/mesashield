@@ -18,6 +18,14 @@ public static class EssentialServices
         "SearchHost", "backgroundTaskHost", "dnscache", "ntoskrnl",
     };
 
+    // MesaShield's OWN processes — must ALWAYS be allowed out so the product can update itself,
+    // pull signatures, and reach its cloud reputation service. Blocking these was self-sabotage
+    // (it once blocked its own connection to GitHub and could never auto-update).
+    private static readonly HashSet<string> SelfProcesses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "MesaShield", "MesaShield.App", "MesaShield.Service",
+    };
+
     // Domains/suffixes that are core Microsoft/OS or well-known infrastructure. Matched against a
     // resolved hostname when one is available (best-effort — IP-only connections rely on the ports
     // and system-process checks instead).
@@ -26,12 +34,18 @@ public static class EssentialServices
         "windowsupdate.com", "update.microsoft.com", "microsoft.com", "windows.com",
         "msftconnecttest.com", "msftncsi.com", "time.windows.com", "ntp.org",
         "digicert.com", "verisign.com", "sectigo.com",  // certificate revocation / OCSP
+        // MesaShield's own update + signature + reputation infrastructure.
+        "github.com", "githubusercontent.com", "abuse.ch", "virustotal.com",
     };
 
     public static bool IsInfraPort(int port) => InfraPorts.Contains(port);
 
     public static bool IsSystemProcess(string processName) =>
         SystemProcesses.Contains(processName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>MesaShield's own processes — never treated as data exfiltration.</summary>
+    public static bool IsSelf(string processName) =>
+        SelfProcesses.Contains(processName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase));
 
     public static bool IsEssentialHost(string? resolvedHost)
     {
@@ -42,5 +56,5 @@ public static class EssentialServices
 
     /// <summary>True if this connection is core plumbing we should never treat as data exfiltration.</summary>
     public static bool IsEssential(string processName, int remotePort, string? resolvedHost) =>
-        IsInfraPort(remotePort) || IsSystemProcess(processName) || IsEssentialHost(resolvedHost);
+        IsSelf(processName) || IsInfraPort(remotePort) || IsSystemProcess(processName) || IsEssentialHost(resolvedHost);
 }

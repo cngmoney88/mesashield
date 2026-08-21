@@ -80,6 +80,7 @@ public sealed class ShieldEngineHost : IDisposable
     private readonly HttpClient _http;
     private System.Threading.Timer? _fleetTimer;
     private System.Threading.Timer? _fleetCommandTimer;
+    private System.Threading.Timer? _updateTimer;
     private CancellationTokenSource? _selfDefenseCts;
     private int _learnerObservationsSinceSave;
     private bool _started;
@@ -278,6 +279,13 @@ public sealed class ShieldEngineHost : IDisposable
             onUpdateCheck: RunUpdateCheckAsync);
         Scheduler.Start();
         StartSelfDefense();
+
+        // Hands-off updates: check shortly after startup and then every hour, so a new version is
+        // detected and installed on its own — no "check for update" button, no clicking. The daily
+        // scheduled check above still runs as a backstop.
+        _updateTimer = new System.Threading.Timer(_ => { try { _ = RunUpdateCheckAsync(); } catch { } },
+            null, TimeSpan.FromSeconds(45), TimeSpan.FromHours(1));
+
         _started = true;
 
         await EventLog.LogAsync("app", $"MesaShield engine {Version} started.");
@@ -603,6 +611,7 @@ public sealed class ShieldEngineHost : IDisposable
         try { Egress?.Save(EgressStatePath); } catch { }
         _fleetTimer?.Dispose();
         _fleetCommandTimer?.Dispose();
+        _updateTimer?.Dispose();
         EgressWatch?.Dispose();
         Etw?.Dispose();
         Scheduler?.Dispose();

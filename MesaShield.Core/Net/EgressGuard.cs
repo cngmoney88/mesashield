@@ -77,12 +77,18 @@ public sealed class EgressGuard
         if (assessment.IsLearning)
             return Decide(EgressAction.Allow, "Still learning this machine's normal network behavior.");
 
+        // The genuine data-exfiltration fingerprint: bulk data leaving to a brand-new destination.
+        // This is what Enforce blocks — it stops data from actually leaving.
         if (bigUploadToNewHost)
             return Decide(Mode == EgressMode.Enforce ? EgressAction.Block : EgressAction.Watch,
                 $"Large upload ({bytesOut / (1024.0 * 1024):F1} MB) to a destination {o.ProcessName} has never used — possible data exfiltration.");
 
+        // A plain connection to a new IP is NOT exfiltration — modern apps (browsers, cloud sync,
+        // updates) legitimately hit hundreds of rotating CDN addresses. We watch and log it, but we
+        // do not cut it, even in Enforce. Blocking these was blocking normal work (and MesaShield's
+        // own updates). Only an explicit user block or the bulk-upload fingerprint above stops traffic.
         if (novel)
-            return Decide(Mode == EgressMode.Enforce ? EgressAction.Block : EgressAction.Watch,
+            return Decide(EgressAction.Watch,
                 $"{o.ProcessName} connecting to an unfamiliar external destination ({o.RemoteAddress}).");
 
         return Decide(EgressAction.Allow, "Known-normal destination for this program.");

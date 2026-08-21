@@ -49,12 +49,25 @@ public sealed class EgressGuardTests
     }
 
     [Fact]
-    public void Enforce_Blocks_New_External_Destination()
+    public void Enforce_Watches_But_Does_Not_Block_A_Plain_New_Destination()
     {
+        // A plain connection to a new IP (no bulk upload) is normal for browsers, cloud sync, and
+        // updates — Enforce logs it but must NOT cut it. Only the exfiltration fingerprint (bulk
+        // upload to a new host) or an explicit user block stops traffic.
         var guard = Warmed(EgressMode.Enforce);
         var d = guard.Evaluate(Obs("invoice", "45.83.12.9"));
-        Assert.Equal(EgressAction.Block, d.Action);
+        Assert.Equal(EgressAction.Watch, d.Action);
         Assert.False(d.Essential);
+    }
+
+    [Fact]
+    public void MesaShields_Own_Updates_Are_Never_Blocked()
+    {
+        // Regression guard: MesaShield must always be able to reach the network to update itself.
+        var guard = Warmed(EgressMode.Enforce);
+        var d = guard.Evaluate(Obs("MesaShield.App", "185.199.109.133"), bytesOut: 50L * 1024 * 1024);
+        Assert.Equal(EgressAction.Allow, d.Action);
+        Assert.True(d.Essential);
     }
 
     [Fact]
