@@ -38,48 +38,61 @@ public partial class MainWindow : Window
         _tray.ProtectionToggleRequested += enable => Dispatcher.Invoke(() => ToggleAllProtection(enable));
         _tray.QuitRequested += () => Dispatcher.Invoke(() => { _reallyClosing = true; Close(); });
 
-        App.RealTime.ThreatHandled += (finding, quarantined) => Dispatcher.Invoke(() =>
-        {
-            _threatsHandled++;
-            RefreshDashboardCounters();
-            _ = RefreshActivityAsync();
-            if (App.Settings.ShowNotifications)
-                _tray?.Notify("Threat blocked", $"{finding.ThreatName}\n{Path.GetFileName(finding.FilePath)}", warning: true);
-            _ = App.RecordIncidentAsync(quarantined ? "quarantine" : "detection",
-                $"{finding.ThreatName} detected in {Path.GetFileName(finding.FilePath)}", finding.FilePath, finding.ThreatName);
-        });
-        App.ProcessWatch.ProcessBlocked += (_sender, finding) => Dispatcher.Invoke(() =>
-        {
-            _threatsHandled++;
-            RefreshDashboardCounters();
-            if (App.Settings.ShowNotifications)
-                _tray?.Notify("Program blocked", finding.ThreatName, warning: true);
-            _ = App.RecordIncidentAsync("blocked", $"Program blocked: {finding.ThreatName}", finding.FilePath, finding.ThreatName);
-        });
-        App.BehaviorWatch.AlertRaised += alert => Dispatcher.Invoke(() =>
-        {
-            _threatsHandled++;
-            RefreshDashboardCounters();
-            _ = RefreshActivityAsync();
-            if (App.Settings.ShowNotifications)
-                _tray?.Notify(alert.Severity == ThreatSeverity.Malicious ? "⚠ Ransomware blocked" : "Suspicious activity", alert.Message, warning: true);
-            _ = App.RecordIncidentAsync("behavior", alert.Message, null, alert.Severity == ThreatSeverity.Malicious ? "Behavior.Ransomware" : null);
-        });
+        // Engine events arrive already marshaled to the UI thread via App.WireHostEvents;
+        // incident recording happens inside the host, so these handlers are display-only.
 
-        UpdateRealTimeCard();
-        UpdateDeepMonitorPrompt();
-        RefreshDashboardCounters();
-        RefreshSignatureCard();
-        await RefreshActivityAsync();
-        await RefreshQuarantineAsync();
-        LoadSettingsIntoUi();
+        if (App.Host.IsPassive)
+        {
+            // The always-on service owns protection on this PC; show its live status here.
+            ShowServiceViewerStatus();
+        }
+        else
+        {
+            UpdateRealTimeCard();
+            UpdateDeepMonitorPrompt();
+            RefreshDashboardCounters();
+            RefreshSignatureCard();
+            await RefreshActivityAsync();
+            await RefreshQuarantineAsync();
+            LoadSettingsIntoUi();
 
-        if (App.Signatures.Count == 0)
-            UpdateStatusText.Text = "No signature database installed yet — open Settings to download it. " +
-                                    "Pattern and heuristic detection work without it.";
+            if (App.Signatures.Count == 0)
+                UpdateStatusText.Text = "No signature database installed yet — open Settings to download it. " +
+                                        "Pattern and heuristic detection work without it.";
+        }
 
         if (App.StartMinimized && App.Settings.StartMinimizedToTray)
             Hide();
+    }
+
+    /// <summary>Viewer mode: the always-on service protects this PC. Reflect its live status (from the
+    /// machine-wide status file the service writes) rather than this idle in-app engine.</summary>
+    private void ShowServiceViewerStatus()
+    {
+        try
+        {
+            var statusPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "MesaShield", "status.json");
+            if (File.Exists(statusPath))
+            {
+                var s = System.Text.Json.JsonSerializer.Deserialize<MachineStatus>(File.ReadAllText(statusPath));
+                if (s is not null)
+                {
+                    RealTimeStatus.Text = s.RealTimeProtection ? "On" : "Off";
+                    RealTimeStatus.Foreground = (System.Windows.Media.Brush)FindResource(s.RealTimeProtection ? "GoodBrush" : "BadBrush");
+                    SignatureCount.Text = s.SignatureCount.ToString("N0");
+                    ThreatCount.Text = s.ThreatsHandled.ToString("N0");
+                    QuarantineCount.Text = $"{s.InQuarantine} in quarantine";
+                    VersionText.Text = $"MesaShield {s.Version} (service)";
+                }
+            }
+            RealTimeToggle.IsEnabled = false;   // can't toggle the service engine from the viewer
+            UpdateStatusText.Text =
+                "Protected by the always-on MesaShield service — it runs in the background before you sign in " +
+                "and restarts itself if stopped. This window is a live viewer.";
+        }
+        catch { /* best-effort viewer */ }
     }
 
     public void OnUsbInserted(string root)
@@ -92,6 +105,34 @@ public partial class MainWindow : Window
             ShowPage("Scan");
             _ = RunScanAsync(new[] { root }, $"Scanning {root}");
         }
+    }
+
+    // ---- Engine event handlers (called on the UI thread by App.WireHostEvents) ----
+
+    public void OnThreatHandled(ThreatFinding finding, bool quarantined)
+    {
+        _threatsHandled++;
+        RefreshDashboardCounters();
+        _ = RefreshActivityAsync();
+        if (App.Settings.ShowNotifications)
+            _tray?.Notify("Threat blocked", $"{finding.ThreatName}\n{Path.GetFileName(finding.FilePath)}", warning: true);
+    }
+
+    public void OnProcessBlocked(ThreatFinding finding)
+    {
+        _threatsHandled++;
+        RefreshDashboardCounters();
+        if (App.Settings.ShowNotifications)
+            _tray?.Notify("Program blocked", finding.ThreatName, warning: true);
+    }
+
+    public void OnBehaviorAlert(MesaShield.Core.BehaviorAlert alert)
+    {
+        _threatsHandled++;
+        RefreshDashboardCounters();
+        _ = RefreshActivityAsync();
+        if (App.Settings.ShowNotifications)
+            _tray?.Notify(alert.Severity == ThreatSeverity.Malicious ? "⚠ Ransomware blocked" : "Suspicious activity", alert.Message, warning: true);
     }
 
     /// <summary>A detection was reconstructed into a full incident story — surface it and keep the last few.</summary>
@@ -317,7 +358,6 @@ public partial class MainWindow : Window
     private async void RefreshDashboardCounters()
     {
         ThreatCount.Text = _threatsHandled.ToString("N0");
-        App.ThreatsHandledTotal = _threatsHandled;
         var entries = await App.Quarantine.ListAsync();
         QuarantineCount.Text = $"{entries.Count} in quarantine";
     }

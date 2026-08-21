@@ -1,14 +1,27 @@
 # MesaShield changelog
 
+## v0.19.0 — always-on Windows Service (permanent protection)
+- **MesaShield now runs as a true Windows Service.** The protection engine (real-time scanning,
+  ransomware guard, egress/DLP, deep ETW monitoring, adaptive learning, updates, fleet) was
+  extracted into one shared `ShieldEngineHost` that runs headless under LocalSystem — it starts
+  before anyone logs in, keeps running with no window open, and Windows restarts it automatically
+  if it is ever stopped. Install it with `MesaShield-Service.exe install` (as admin).
+- **The app becomes a live viewer.** When the service is protecting a PC, opening the app no longer
+  starts a second engine — it detects the service and shows its live status instead, so there is
+  never a double-run and never a confusing "which one is real" moment.
+- **One engine, not two.** The app and the service run the exact same engine code — a single
+  implementation, so behavior can never drift between them.
+- **Hardened release pipeline.** Every tagged release now builds the whole solution, publishes both
+  the app installer and the service, and is explicitly marked "Latest" so machines always update to
+  the newest build (fixes releases getting stuck on an older version).
+
 ## v0.18.0 — incident timeline + reliable publishing
-- **Automated incident timeline.** When something is detected, MesaShield now reconstructs the
-  whole story around it — the file arriving, the process launching, the network destination it
-  tried to reach, and what was done about it — into a plain-English, timestamped incident with a
-  summary, outcome, and recommendation. Incidents are saved so they can be reviewed later and
-  exported as a shareable report.
-- **Publishing fixed.** Resolved the deployment mistake that kept GitHub frozen at v0.8.0 (new
-  versions were being left as un-extracted zips instead of committed source). A single
-  PUBLISH.bat now syncs, commits, tags, and pushes correctly every time.
+- **Automated incident timeline.** When something is detected, MesaShield reconstructs the whole
+  story around it — the file arriving, the process launching, the network destination it tried to
+  reach, and what was done about it — into a plain-English, timestamped incident with a summary,
+  outcome, and recommendation. Incidents are saved and can be exported as a shareable report.
+- **Publishing fixed.** Resolved the deployment mistake that kept GitHub frozen at an old version
+  (new versions were left as un-extracted zips instead of committed source).
 
 ## v0.17.0 — hands-off updates + live traffic
 - **Fully automatic updates.** The GitHub update source is pre-configured, and updates now

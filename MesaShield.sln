@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MesaShield.Tests", "MesaShi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MesaShield.App", "MesaShield.App\MesaShield.App.csproj", "{B286B031-C6DE-437F-9AE5-A237E1A1B69C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MesaShield.Service", "MesaShield.Service\MesaShield.Service.csproj", "{76A96BD5-2B96-4726-98F8-71BA55E36EAB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -30,5 +32,9 @@ Global
 		{B286B031-C6DE-437F-9AE5-A237E1A1B69C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B286B031-C6DE-437F-9AE5-A237E1A1B69C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B286B031-C6DE-437F-9AE5-A237E1A1B69C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{76A96BD5-2B96-4726-98F8-71BA55E36EAB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{76A96BD5-2B96-4726-98F8-71BA55E36EAB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{76A96BD5-2B96-4726-98F8-71BA55E36EAB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{76A96BD5-2B96-4726-98F8-71BA55E36EAB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

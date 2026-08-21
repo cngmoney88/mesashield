@@ -1,9 +1,9 @@
 name: Build and release MesaShield
 
-# Runs whenever you push a version tag like v0.3.0. It builds the app, runs the
-# tests, publishes the single-file .exe, generates the release manifest MesaShield's
-# auto-updater reads, and attaches both to a GitHub Release. From then on, every
-# copy of MesaShield pointed at this repo updates itself automatically.
+# Runs whenever you push a version tag like v0.19.0. It builds the whole solution, runs the
+# tests, publishes the self-contained app installer AND the always-on service, generates the
+# release manifest MesaShield's auto-updater reads, and attaches everything to a GitHub Release
+# that is explicitly marked "Latest" so every machine updates to it.
 
 on:
   push:
@@ -24,26 +24,35 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore and test
-        run: |
-          dotnet test MesaShield.Tests/MesaShield.Tests.csproj -c Release
+      - name: Build the whole solution (fails loudly if anything is broken)
+        run: dotnet build MesaShield.sln -c Release
 
-      - name: Publish self-contained single-file exe (zero prerequisites on target machines)
+      - name: Run tests
+        run: dotnet test MesaShield.Tests/MesaShield.Tests.csproj -c Release --no-build
+
+      - name: Publish the app installer (self-contained, zero prerequisites on target PCs)
         run: >
           dotnet publish MesaShield.App/MesaShield.App.csproj
           -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+          -p:IncludeNativeLibrariesForSelfExtract=true -o publish-app
 
-      - name: Name the asset MesaShield-Setup.exe
+      - name: Publish the always-on service (self-contained single exe)
+        run: >
+          dotnet publish MesaShield.Service/MesaShield.Service.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true -o publish-svc
+
+      - name: Name the assets
         shell: pwsh
-        run: Copy-Item publish/MesaShield.App.exe publish/MesaShield-Setup.exe -Force
+        run: |
+          New-Item -ItemType Directory -Force -Path publish | Out-Null
+          Copy-Item publish-app/MesaShield.App.exe     publish/MesaShield-Setup.exe   -Force
+          Copy-Item publish-svc/MesaShield.Service.exe publish/MesaShield-Service.exe -Force
 
       # Optional Authenticode signing — removes the SmartScreen "unknown publisher" warning.
-      # Add two repo secrets to enable: CODE_SIGN_PFX_BASE64 (base64 of your .pfx) and
-      # CODE_SIGN_PASSWORD. Without them, this step no-ops and the build stays unsigned.
-      # (The secret is read into env and checked in-script, because GitHub does not allow the
-      # `secrets` context inside a step `if:` condition.)
+      # Add two repo secrets to enable: CODE_SIGN_PFX_BASE64 (base64 of your .pfx) and CODE_SIGN_PASSWORD.
       - name: Code sign (if a certificate is configured)
         shell: pwsh
         env:
@@ -54,34 +63,43 @@ jobs:
           [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String($env:PFX_B64))
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
                       Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1
-          & $signtool.FullName sign /f "$env:RUNNER_TEMP\cert.pfx" /p $env:PFX_PW `
-            /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 publish/MesaShield-Setup.exe
+          foreach ($f in @("publish/MesaShield-Setup.exe","publish/MesaShield-Service.exe")) {
+            & $signtool.FullName sign /f "$env:RUNNER_TEMP\cert.pfx" /p $env:PFX_PW `
+              /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $f
+          }
           Remove-Item "$env:RUNNER_TEMP\cert.pfx" -Force
 
-      - name: Compute version and hash
+      - name: Compute version and hashes
         id: meta
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
-          $hash = (Get-FileHash publish/MesaShield-Setup.exe -Algorithm SHA256).Hash.ToLower()
-          "version=$version" >> $env:GITHUB_OUTPUT
-          "sha256=$hash"     >> $env:GITHUB_OUTPUT
+          $hash    = (Get-FileHash publish/MesaShield-Setup.exe   -Algorithm SHA256).Hash.ToLower()
+          $svcHash = (Get-FileHash publish/MesaShield-Service.exe -Algorithm SHA256).Hash.ToLower()
+          "version=$version"   >> $env:GITHUB_OUTPUT
+          "sha256=$hash"       >> $env:GITHUB_OUTPUT
+          "svcsha256=$svcHash" >> $env:GITHUB_OUTPUT
 
       - name: Write release manifest
         shell: pwsh
         run: |
           $manifest = @{
-            version     = "${{ steps.meta.outputs.version }}"
-            notes       = "MesaShield ${{ github.ref_name }}"
-            downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/MesaShield-Setup.exe"
-            sha256      = "${{ steps.meta.outputs.sha256 }}"
-            mandatory   = $false
+            version        = "${{ steps.meta.outputs.version }}"
+            notes          = "MesaShield ${{ github.ref_name }}"
+            downloadUrl    = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/MesaShield-Setup.exe"
+            sha256         = "${{ steps.meta.outputs.sha256 }}"
+            serviceUrl     = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/MesaShield-Service.exe"
+            serviceSha256  = "${{ steps.meta.outputs.svcsha256 }}"
+            mandatory      = $false
           } | ConvertTo-Json
           $manifest | Out-File -FilePath publish/latest.json -Encoding utf8
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (explicitly marked Latest)
         uses: softprops/action-gh-release@v2
         with:
+          make_latest: true
+          name: MesaShield ${{ github.ref_name }}
           files: |
             publish/MesaShield-Setup.exe
+            publish/MesaShield-Service.exe
             publish/latest.json
