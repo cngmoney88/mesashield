@@ -9,7 +9,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AssemblyTitle>MesaShield Service</AssemblyTitle>
     <Product>MesaShield Security</Product>
-    <Version>0.20.0</Version>
+    <Version>0.21.0</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
     <!-- The always-on protection engine. Runs headless as a Windows Service (LocalSystem),

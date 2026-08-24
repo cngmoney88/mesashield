@@ -160,6 +160,8 @@ public sealed class ShieldEngineHost : IDisposable
             Reputation = Settings.CloudLookupEnabled ? Reputation : null,
             Classifier = Settings.MlClassifierEnabled ? Classifier : null,
             BenignModel = Settings.MlClassifierEnabled ? BenignModel : null,
+            // Never quarantine a validly signed program (Windows, Brave, Steam, etc.) on a guess.
+            IsTrustedSigned = CodeSigning.IsTrusted,
         };
 
         var realTimeOptions = Settings.ToScanOptions();

@@ -26,6 +26,12 @@ public sealed class ScanEngine
     /// <summary>Optional one-class "known-good" model that flags files unlike normal software.</summary>
     public Ml.BenignAnomalyModel? BenignModel { get; set; }
 
+    /// <summary>Optional Authenticode trust check (supplied by the Windows layer). When it reports a
+    /// file is validly signed by a trusted publisher, MesaShield will not auto-quarantine it on the
+    /// strength of a guess (ML / heuristic / anomaly) — only a definitive detection (known-malware
+    /// hash, pattern rule, AMSI, or cloud reputation) can act on signed software.</summary>
+    public Func<string, bool>? IsTrustedSigned { get; set; }
+
     private static readonly HashSet<string> ScriptExtensions = new(StringComparer.OrdinalIgnoreCase)
     { ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".bat", ".cmd", ".hta" };
 
@@ -193,6 +199,30 @@ public sealed class ScanEngine
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Skipped(path, ex.Message);
+        }
+
+        // Trusted-signature safety net: a properly code-signed program is never quarantined on a
+        // guess. If ML / heuristics / the anomaly model flagged a validly signed file as malicious,
+        // downgrade those to "suspicious" (surface it for review, but don't delete the user's app).
+        // Definitive detections (known-malware hash, pattern, AMSI, cloud reputation) are untouched.
+        if (findings.Count > 0 &&
+            findings.Any(f => f.Severity == ThreatSeverity.Malicious &&
+                              f.Method is DetectionMethod.MachineLearning or DetectionMethod.Heuristic or DetectionMethod.Anomaly) &&
+            (IsTrustedSigned?.Invoke(path) ?? false))
+        {
+            for (int i = 0; i < findings.Count; i++)
+            {
+                var f = findings[i];
+                if (f.Severity == ThreatSeverity.Malicious &&
+                    f.Method is DetectionMethod.MachineLearning or DetectionMethod.Heuristic or DetectionMethod.Anomaly)
+                {
+                    findings[i] = f with
+                    {
+                        Severity = ThreatSeverity.Suspicious,
+                        Detail = f.Detail + " — Signed by a trusted publisher, so it was flagged for review rather than quarantined.",
+                    };
+                }
+            }
         }
 
         return new FileScanResult { FilePath = path, Findings = findings };

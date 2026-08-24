@@ -1,5 +1,16 @@
 # MesaShield changelog
 
+## v0.21.0 — stop false-positive quarantines of trusted software (important)
+- **Signed programs are no longer quarantined on a guess.** MesaShield was flagging legitimate,
+  digitally signed apps — Brave, Steam, Microsoft Edge, GIGABYTE tools, Ollama — as malware from its
+  ML/heuristic scores and moving them to quarantine (which made them "disappear"). Now, before acting
+  on a guess, MesaShield asks Windows whether the file is validly signed by a trusted publisher (the
+  same check Explorer's "Digital Signatures" tab uses). If it is, the file is flagged for review, not
+  quarantined. Definitive detections — a known-malware hash, a pattern rule, AMSI, or cloud
+  reputation — still act on anything, signed or not.
+- **To recover:** open Quarantine and Restore anything of yours that was caught; after updating to
+  v0.21 it will not be re-quarantined.
+
 ## v0.20.0 — one app, truly hands-off updates
 - **Updates now install themselves — no button, no clicking.** MesaShield checks for a new version
   shortly after it starts and then every hour (not just once a day), downloads and verifies it, and

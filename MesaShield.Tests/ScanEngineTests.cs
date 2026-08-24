@@ -40,6 +40,35 @@ public sealed class ScanEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task Signed_Program_Is_Not_Quarantined_On_A_Heuristic_Guess()
+    {
+        // A disguised-executable heuristic normally fires Malicious (which triggers auto-quarantine).
+        var path = WriteFile("invoice.pdf.exe", new byte[] { 0x4D, 0x5A, 0, 0, 0, 0, 0, 0 });
+
+        var unsigned = CreateEngine();
+        var r1 = await unsigned.ScanFileAsync(path, new ScanOptions());
+        Assert.Contains(r1.Findings, f => f.Method == DetectionMethod.Heuristic && f.Severity == ThreatSeverity.Malicious);
+
+        // With a trusted signature, the same finding must be downgraded to Suspicious — never deleted.
+        var signed = CreateEngine();
+        signed.IsTrustedSigned = _ => true;
+        var r2 = await signed.ScanFileAsync(path, new ScanOptions());
+        Assert.DoesNotContain(r2.Findings, f => f.Severity == ThreatSeverity.Malicious);
+        Assert.Contains(r2.Findings, f => f.Method == DetectionMethod.Heuristic && f.Severity == ThreatSeverity.Suspicious);
+    }
+
+    [Fact]
+    public async Task Signed_File_Is_Still_Quarantined_On_A_Definitive_Signature_Hit()
+    {
+        // Trust must NOT shield a file that is a confirmed known-malware hash match.
+        var path = WriteFile("eicar-signed.com", EicarBytes());
+        var engine = CreateEngine();
+        engine.IsTrustedSigned = _ => true;   // pretend it's signed
+        var result = await engine.ScanFileAsync(path, new ScanOptions());
+        Assert.Contains(result.Findings, f => f.ThreatName == "EICAR-Test-File" && f.Severity == ThreatSeverity.Malicious);
+    }
+
+    [Fact]
     public async Task Detects_Eicar_Across_Chunk_Boundary()
     {
         // Bury EICAR deep in a large file to exercise the chunked/overlapped stream scan.
